@@ -1,6 +1,6 @@
 # slurm_for_Rocky9
 
-Build of Slurm done by Github actions.
+Build of Slurm and openpmi-x done by Github actions.
 
 Uses:
 
