@@ -85,3 +85,68 @@ jobs:
           name: pmix_rpms
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/*.rpm
+
+  build_slurm:
+    name: Build slurm
+    runs-on: ubuntu-latest
+    needs:
+      - build_pmix
+    env:
+      GHCR_U: ${{ github.actor }}
+      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+
+    steps:
+      - name: Download pmix rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: pmix_rpms
+          path: pmix_rpms
+
+      - name: Checkout slurm build script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/build_slurm.sh
+          sparse-checkout-cone-mode: false
+          path: scripts
+
+      - name: Download slurm tarball, unpack, patch spec file
+        shell: bash
+        run: |
+           wget --quiet https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
+           tar -xf ./slurm*
+           sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
+           sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" ./slurm*/slurm.spec
+
+      - name: Login to ghcr registry with docker and do build
+        shell: bash
+        run: |
+            set -x
+            echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
+            docker run --cidfile /tmp/docker_test.cid \
+                     --env SLURM_RELTAG=${RELTAG} \
+                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
+                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
+                     -v ${HOME}:${HOME} \
+                     -w ${GITHUB_WORKSPACE} ${SLURMIMAGE_URL} /bin/bash scripts/.github/scripts/build_slurm.sh
+
+      - name: Upload build log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm_build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/slurm_build.log
+
+      - name: Upload image_slurm_rpms.txt as artifact 
+        uses: actions/upload-artifact@v4
+        with:
+          name: image_slurm_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_slurm_rpms.txt
+            
+      - name: Upload slurm rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm_rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
