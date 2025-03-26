@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # print input vars
-echo "PMIX_RELTAG: ${PMIX_RELTAG}, PMIX_VERSION: ${PMIX_VERSION}"
+echo "PMIX_RELTAG: ${PMIX_RELTAG}"
 
 # enable shell debug
 set -x
