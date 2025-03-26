@@ -58,7 +58,6 @@ jobs:
           docker run --cidfile /tmp/docker_test.cid \
                      --env PMIX_RELTAG=${RELTAG} \
                      --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
-                     --env PMIX_VERSION=${PMIX_VERSION} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
                      -v ${HOME}:${HOME} \
                      -w ${GITHUB_WORKSPACE} \
@@ -128,7 +127,9 @@ jobs:
                      --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
                      -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} ${SLURMIMAGE_URL} /bin/bash scripts/.github/scripts/build_slurm.sh
+                     -w ${GITHUB_WORKSPACE} \
+                     ${SLURMIMAGE_URL} \
+                     /bin/bash scripts/build_slurm.sh | tee slurm_build.log
 
       - name: Upload build log as artifact
         uses: actions/upload-artifact@v4
