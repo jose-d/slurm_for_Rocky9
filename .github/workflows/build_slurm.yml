@@ -117,6 +117,13 @@ jobs:
            sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
            sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" ./slurm*/slurm.spec
 
+      - name: Upload spec file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm.spec
+          if-no-files-found: error
+          path: ${{ github.workspace }}/slurm*/slurm.spec
+
       - name: Login to ghcr registry with docker and do build
         shell: bash
         run: |
