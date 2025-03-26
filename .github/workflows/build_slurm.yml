@@ -1,0 +1,102 @@
+name: Build Slurm
+run-name: ${{ github.actor }} is attempting to build pmi-x and slurm 🚀
+on: workflow_dispatch
+permissions: write-all
+env:
+  # version of openpmix and slurm to download and build together
+  PMIX_VERSION: 5.0.6
+  SLURM_VERSION: 24.11.3
+  
+  # files used as cache for variables sharing
+  GLOBAL_VARS_FILE: global_vars.txt
+
+  # images used as a build env
+  PMIXIMAGE_URL: ghcr.io/jose-d/rocky9_pmix-build-image:latest
+  SLURMIMAGE_URL: ghcr.io/jose-d/rocky9_slurm-build-image:latest
+
+jobs:
+  prolog:
+    name: Create global release tag, and related job-specific naming constants and save it into GLOBAL_VARS_FILE
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create vars, save them into GLOBAL_VARS_FILE and GITHUB_STEP_SUMMARY
+        shell: bash
+        run: |
+          # this is the date-based identifier for this release:
+          RELTAG="$(date +%Y%m%d%H%M%S)"
+           
+          touch $GLOBAL_VARS_FILE
+
+          echo "RELTAG=${RELTAG}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+          echo "PMIXIMAGE_URL=${PMIXIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+          echo "SLURMIMAGE_URL=${SLURMIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+
+      - name: Upload GLOBAL_VARS_FILE to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+          path: ${{ env.GLOBAL_VARS_FILE }}
+          
+  build_pmix:
+    name: Build pmix
+    runs-on: ubuntu-latest
+    needs: prolog
+    env:
+      GHCR_U: ${{ github.actor }}
+      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download GLOBAL_VARS_FILE
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+
+      - name: checkout pmix build script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: build_pmix.sh
+          sparse-checkout-cone-mode: false
+          path: scripts
+
+      - name: Download pmix tarball, unpack, patch spec file
+        shell: bash
+        run: |
+            source $GLOBAL_VARS_FILE
+            wget "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
+            tar -xf ./pmix*
+            sed -i "s/^Release.*$/Release: ${RELTAG}%{?dist}/g" pmix-*/contrib/pmix.spec
+          
+      - name: Login to ghcr registry with docker and do build
+        run: |
+          source ${GLOBAL_VARS_FILE}
+          echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
+          docker run --cidfile /tmp/docker_test.cid \
+                     --env-file $GLOBAL_VARS_FILE \
+                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
+                     --env PMIX_VERSION=${PMIX_VERSION} \
+                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
+                     -v ${HOME}:${HOME} \
+                     -w ${GITHUB_WORKSPACE} ${PMIXIMAGE_URL} /bin/bash scripts/.github/scripts/build_pmix.sh
+
+      - name: Upload build log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmix_build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/pmix_build.log
+
+      - name: Upload image_pmix_rpms.txt as artifact 
+        uses: actions/upload-artifact@v4
+        with:
+          name: image_pmix_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_pmix_rpms.txt
+
+      - name: Upload pmix rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmix_rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
+
+          
