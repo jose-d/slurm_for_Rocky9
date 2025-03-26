@@ -90,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_pmix
+      - prolog
     env:
       GHCR_U: ${{ github.actor }}
       GHCR_S: ${{ secrets.GITHUB_TOKEN }}
