@@ -75,7 +75,9 @@ jobs:
                      --env PMIX_VERSION=${PMIX_VERSION} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
                      -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} ${PMIXIMAGE_URL} /bin/bash scripts/.github/scripts/build_pmix.sh
+                     -w ${GITHUB_WORKSPACE} \
+                     ${PMIXIMAGE_URL} \
+                     /bin/bash scripts/build_pmix.sh
 
       - name: Upload build log as artifact
         uses: actions/upload-artifact@v4
