@@ -56,6 +56,7 @@ jobs:
         run: |
           echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
           docker run --cidfile /tmp/docker_test.cid \
+                     --env PMIX_RELTAG=${RELTAG}
                      --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
                      --env PMIX_VERSION=${PMIX_VERSION} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
@@ -84,6 +85,3 @@ jobs:
           name: pmix_rpms
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/*.rpm
-
-
-          
