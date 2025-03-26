@@ -105,7 +105,7 @@ jobs:
       - name: Checkout slurm build script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: .github/build_slurm.sh
+          sparse-checkout: build_slurm.sh
           sparse-checkout-cone-mode: false
           path: scripts
 
