@@ -16,12 +16,6 @@ set -e
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
 cp  ${GITHUB_WORKSPACE}/pmix-*.tar.bz2 ${HOME}/rpmbuild/SOURCES/
 
-echo "CFLAGS:"
-echo ${CFLAGS}
-echo "------"
-
-#echo $CFLAGS=$(echo $CFLAGS | sed 's/-flto//g')
-
 # dump rpmlist for possible forensic
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
 
