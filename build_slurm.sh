@@ -28,7 +28,7 @@ rpmbuild --define '_with_nvml --with-nvml=/usr/local/cuda/targets/x86_64-linux/'
           --with mysql \
           --with numa \
           --with pmix \
-          -ba ./slurm-*/slurm.spec &> ${GITHUB_WORKSPACE}/slurm_build.log
+          -ba ./slurm-*/slurm.spec
 
 mkdir "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/slurm-*.rpm "${GITHUB_WORKSPACE}/rpms/"
