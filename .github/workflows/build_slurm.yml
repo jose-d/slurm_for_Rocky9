@@ -16,27 +16,28 @@ env:
 
 jobs:
   prolog:
-    name: Create global release tag, and related job-specific naming constants and save it into GLOBAL_VARS_FILE
+    name: Generate release tag from current datestring
     runs-on: ubuntu-latest
     steps:
-      - name: Create vars, save them into GLOBAL_VARS_FILE and GITHUB_STEP_SUMMARY
-        shell: bash
+      - name: Create releasetag
+        id: create_releasetag
         run: |
-          # this is the date-based identifier for this release:
           RELTAG="$(date +%Y%m%d%H%M%S)"
-           
-          touch $GLOBAL_VARS_FILE
+          echo "::set-output name=reltag::${RELTAG}"
 
-          echo "RELTAG=${RELTAG}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
-          echo "PMIXIMAGE_URL=${PMIXIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
-          echo "SLURMIMAGE_URL=${SLURMIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+    outputs:
+      reltag: ${{ steps.create_releasetag.outputs.reltag }}
 
-      - name: Upload GLOBAL_VARS_FILE to artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.GLOBAL_VARS_FILE }}
-          path: ${{ env.GLOBAL_VARS_FILE }}
-          
+  verify_reltag:
+    runs-on: ubuntu-latest
+    needs: prolog
+    env:
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+    steps:
+      - name: Print releasetag
+        run: |
+          echo ${RELTAG}
+      
   build_pmix:
     name: Build pmix
     runs-on: ubuntu-latest
