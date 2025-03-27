@@ -20,10 +20,10 @@ jobs:
         id: create_releasetag
         run: |
           RELTAG="$(date +%Y%m%d%H%M%S)"
-          echo "::set-output name=reltag::${RELTAG}"
+          echo "RELTAG=${RELTAG}" >> "$GITHUB_OUTPUT"
 
     outputs:
-      reltag: ${{ steps.create_releasetag.outputs.reltag }}
+      reltag: ${{ steps.create_releasetag.outputs.RELTAG }}
       
   build_pmix:
     name: Build pmix
