@@ -38,7 +38,7 @@ jobs:
       - name: checkout pmix build script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: build_pmix.sh
+          sparse-checkout: scripts/build_pmix.sh
           sparse-checkout-cone-mode: false
           path: scripts
 
@@ -96,7 +96,7 @@ jobs:
       - name: Checkout slurm build script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: build_slurm.sh
+          sparse-checkout: scripts/build_slurm.sh
           sparse-checkout-cone-mode: false
           path: scripts
 
