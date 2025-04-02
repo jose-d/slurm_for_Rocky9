@@ -2,11 +2,8 @@
 
 RPM build of [Slurm](https://github.com/SchedMD/slurm) and [OpenPMIx](https://github.com/openpmix/openpmix) done by Github actions.
 
-Uses:
+For the build environment, Docker images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
-* https://github.com/jose-d/rocky9_slurm-build-image
-* https://github.com/jose-d/rocky9_pmix-build-image
-* https://github.com/jose-d/rocky9_base-build-image
 
 ## Acknowledgments:
 
