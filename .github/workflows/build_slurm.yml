@@ -179,6 +179,7 @@ jobs:
             RPMs containing build of
             * [Slurm ${{ env.SLURM_VERSION }}](https://slurm.schedmd.com/) built with NVML/Cuda ${{ env.NVML_VERSION }}
             * [PMIx ${{ env.PMIX_VERSION }}](https://github.com/openpmix/openpmix)
+            for EL9-like distro.
 
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: "slurm-${{ env.SLURM_VERSION }} + pmix-${{ env.PMIX_VERSION }}, (${{ env.RELTAG }})"
