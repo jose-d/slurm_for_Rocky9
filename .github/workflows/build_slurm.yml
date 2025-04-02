@@ -1,7 +1,9 @@
 name: Build Slurm for Rocky9
 run-name: ${{ github.actor }} is attempting to build pmi-x and slurm 🚀
 on: workflow_dispatch
-permissions: write-all
+permissions:
+  contents: write
+  packages: write
 env:
   # version of openpmix and slurm to download and build together
   PMIX_VERSION: 5.0.7
@@ -42,12 +44,23 @@ jobs:
           sparse-checkout-cone-mode: false
           path: .
 
-      - name: Download pmix tarball, unpack, patch spec file
+      - name: Cache PMIx tarball
+        uses: actions/cache@v4
+        with:
+          path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
+          key: ${{ runner.os }}-pmix-${{ env.PMIX_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-pmix-
+
+      - name: Download PMIx tarball, unpack, patch spec file
         shell: bash
         run: |
-            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
-            tar -xf ./pmix*
-            sed -i "s/^Release.*$/Release: ${RELTAG}%{?dist}/g" pmix-*/contrib/pmix.spec
+          set -e
+          if [ ! -f pmix-${{ env.PMIX_VERSION }}.tar.bz2 ]; then
+            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${{ env.PMIX_VERSION }}/pmix-${{ env.PMIX_VERSION }}.tar.bz2"
+          fi
+          tar -xf pmix-${{ env.PMIX_VERSION }}.tar.bz2
+          sed -i "s/^Release.*$/Release: ${{ env.RELTAG }}%{?dist}/g" pmix-*/contrib/pmix.spec
           
       - name: Login to ghcr registry with docker and do build
         run: |
