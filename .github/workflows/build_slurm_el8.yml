@@ -61,7 +61,7 @@ jobs:
       - name: checkout pmix build script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: .github/scripts/el8/build_pmix.sh
+          sparse-checkout: scripts/el8/build_pmix.sh
           sparse-checkout-cone-mode: false
           path: scripts
 
@@ -83,7 +83,7 @@ jobs:
                      --env PMIX_VERSION=${PMIX_VERSION} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
                      -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} ${PMIXIMAGE_URL} /bin/bash scripts/.github/scripts/build_pmix.sh
+                     -w ${GITHUB_WORKSPACE} ${PMIXIMAGE_URL} /bin/bash scripts/scripts/build_pmix.sh
 
       - name: Upload build log as artifact
         uses: actions/upload-artifact@v4
@@ -130,7 +130,7 @@ jobs:
       - name: Checkout slurm build script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: .github/scripts/el8/build_slurm.sh
+          sparse-checkout: scripts/el8/build_slurm.sh
           sparse-checkout-cone-mode: false
           path: scripts
 
@@ -154,7 +154,7 @@ jobs:
                      --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
                      -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
                      -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} ${SLURMIMAGE_URL} /bin/bash scripts/.github/scripts/build_slurm.sh
+                     -w ${GITHUB_WORKSPACE} ${SLURMIMAGE_URL} /bin/bash scripts/scripts/build_slurm.sh
 
       - name: Upload build log as artifact
         uses: actions/upload-artifact@v4
