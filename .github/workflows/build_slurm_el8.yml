@@ -1,0 +1,271 @@
+---
+
+name: Build Slurm
+run-name: ${{ github.actor }} is attempting to build pmix and slurm 🚀
+on: workflow_dispatch
+permissions: write-all
+env:
+  # github image repository url - used to cache docker images
+  IMG_REPO_URL: ghcr.io/jose-d/slurm_for_Rocky9
+  # version of openpmix and slurm to download and build together
+  PMIX_VERSION: 5.0.7
+  SLURM_VERSION: 24.11.3
+  # version of CUDA to take NVML library from:
+  NVML_VERSION: 12-6
+  # files used as cache for variables sharing
+  GLOBAL_VARS_FILE: global_vars.txt
+  # configure build Docker images
+    
+  PMIXIMAGE_URL: ghcr.io/jose-d/images/rocky8_pmix-build:latest
+  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build:latest
+  
+  
+jobs:
+
+  prolog:
+    name: Create global release tag, and related job-specific naming constants and save it into GLOBAL_VARS_FILE
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create vars, save them into GLOBAL_VARS_FILE and GITHUB_STEP_SUMMARY
+        shell: bash
+        run: |
+          # this is the date-based identifier for this release:
+          RELTAG="$(date +%Y%m%d%H%M%S)"
+           
+          touch $GLOBAL_VARS_FILE
+
+          echo "RELTAG=${RELTAG}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+          echo "PMIXIMAGE_URL=${PMIXIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+          echo "SLURMIMAGE_URL=${SLURMIMAGE_URL}" | tee --append $GLOBAL_VARS_FILE $GITHUB_STEP_SUMMARY
+
+
+      - name: Upload GLOBAL_VARS_FILE to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+          path: ${{ env.GLOBAL_VARS_FILE }}
+
+  build_pmix:
+    name: Build pmix
+    runs-on: ubuntu-latest
+    needs: prolog
+    env:
+      GHCR_U: ${{ github.actor }}
+      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download GLOBAL_VARS_FILE
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+
+      - name: checkout pmix build script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/el8/build_pmix.sh
+          sparse-checkout-cone-mode: false
+          path: scripts
+
+      - name: Download pmix tarball, unpack, patch spec file
+        shell: bash
+        run: |
+            source $GLOBAL_VARS_FILE
+            wget "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
+            tar -xf ./pmix*
+            sed -i "s/^Release.*$/Release: ${RELTAG}%{?dist}/g" pmix-*/contrib/pmix.spec
+          
+      - name: Login to ghcr registry with docker and do build
+        run: |
+          source ${GLOBAL_VARS_FILE}
+          echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
+          docker run --cidfile /tmp/docker_test.cid \
+                     --env-file $GLOBAL_VARS_FILE \
+                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
+                     --env PMIX_VERSION=${PMIX_VERSION} \
+                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
+                     -v ${HOME}:${HOME} \
+                     -w ${GITHUB_WORKSPACE} ${PMIXIMAGE_URL} /bin/bash scripts/.github/scripts/build_pmix.sh
+
+      - name: Upload build log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmix_build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/pmix_build.log
+
+      - name: Upload image_pmix_rpms.txt as artifact 
+        uses: actions/upload-artifact@v4
+        with:
+          name: image_pmix_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_pmix_rpms.txt
+
+      - name: Upload pmix rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmix_rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
+  build_slurm:
+    name: Build slurm
+    runs-on: ubuntu-latest
+    needs:
+      - build_pmix
+    env:
+      GHCR_U: ${{ github.actor }}
+      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Download GLOBAL_VARS_FILE
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+
+      - name: Download pmix rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: pmix_rpms
+          path: pmix_rpms
+
+      - name: Checkout slurm build script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/el8/build_slurm.sh
+          sparse-checkout-cone-mode: false
+          path: scripts
+
+      - name: Download slurm tarball, unpack, patch spec file
+        shell: bash
+        run: |
+           source $GLOBAL_VARS_FILE
+           wget --quiet https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
+           tar -xf ./slurm*
+           sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
+           sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" ./slurm*/slurm.spec
+
+      - name: Login to ghcr registry with docker and do build
+        shell: bash
+        run: |
+            set -x
+            source $GLOBAL_VARS_FILE
+            echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
+            docker run --cidfile /tmp/docker_test.cid \
+                     --env-file $GLOBAL_VARS_FILE \
+                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
+                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
+                     -v ${HOME}:${HOME} \
+                     -w ${GITHUB_WORKSPACE} ${SLURMIMAGE_URL} /bin/bash scripts/.github/scripts/build_slurm.sh
+
+      - name: Upload build log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm_build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/slurm_build.log
+
+      - name: Upload image_slurm_rpms.txt as artifact 
+        uses: actions/upload-artifact@v4
+        with:
+          name: image_slurm_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_slurm_rpms.txt
+            
+      - name: Upload slurm rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm_rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
+  publish_files:
+    name: Publish built files in release
+    runs-on: ubuntu-latest
+    needs:
+      - build_slurm
+      - build_pmix
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Download GLOBAL_VARS_FILE
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.GLOBAL_VARS_FILE }}
+
+      - name: Download pmix rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: pmix_rpms
+          path: rpms
+
+      - name: Download pmix rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: slurm_rpms
+          path: rpms
+
+      - name: Download pmix_build.log
+        uses: actions/download-artifact@v4
+        with:
+          name: pmix_build.log
+
+      - name: Download slurm_build.log
+        uses: actions/download-artifact@v4
+        with:
+          name: slurm_build.log
+
+      - name: Download slurm_build.log
+        uses: actions/download-artifact@v4
+        with:
+          name: image_pmix_rpms.txt
+
+      - name: Download slurm_build.log
+        uses: actions/download-artifact@v4
+        with:
+          name: image_slurm_rpms.txt
+
+      - name: Read persistent data and add them into env, create tarball from all rpms
+        shell: bash
+        run: |
+          source ${GLOBAL_VARS_FILE}
+          echo "RELTAG=${RELTAG}" | tee --append $GITHUB_ENV
+
+          sudo apt -y install zstd
+          tar -cf rpm_tarball_${RELTAG}.tar.gz rpms/
+
+      - name: Create tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Note:
+      # - If we need rpms to be part of release, add pattern
+      #     "rpms/*.rpm" into files part below.
+      
+      - name: Create release and add assets
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            RPMs containing build of
+            * [Slurm ${{ env.SLURM_VERSION }}](https://slurm.schedmd.com/) built with NVML/Cuda ${{ env.NVML_VERSION }}
+            * [PMIx ${{ env.PMIX_VERSION }}](https://github.com/openpmix/openpmix)
+            for EL8-like distro.
+
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: "slurm-${{ env.SLURM_VERSION }} + pmix-${{ env.PMIX_VERSION }}, (${{ env.RELTAG }})"
+          fail_on_unmatched_files: true
+          files: |
+            slurm_build.log
+            pmix_build.log
+            rpm_tarball_*.tar.gz
+            
+    
+
+
+
+
+
+          
