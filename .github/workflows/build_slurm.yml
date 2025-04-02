@@ -1,9 +1,6 @@
 name: Build Slurm for Rocky9
 run-name: ${{ github.actor }} is attempting to build pmi-x and slurm 🚀
 on: workflow_dispatch
-permissions:
-  contents: write
-  packages: write
 env:
   # version of openpmix and slurm to download and build together
   PMIX_VERSION: 5.0.7
@@ -163,6 +160,7 @@ jobs:
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
+    permissions: write-all
     needs:
       - build_slurm
       - build_pmix
