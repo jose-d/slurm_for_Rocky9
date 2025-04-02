@@ -1,6 +1,6 @@
 # Build of Slurm in Rocky9
 
-Build of Slurm and openpmi-x done by Github actions.
+RPM build of [Slurm](https://github.com/SchedMD/slurm) and [OpenPMIx](https://github.com/openpmix/openpmix) done by Github actions.
 
 Uses:
 
