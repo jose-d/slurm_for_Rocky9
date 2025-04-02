@@ -8,8 +8,8 @@ env:
   SLURM_VERSION: 24.11.3
 
   # images used as a build env
-  PMIXIMAGE_URL: ghcr.io/jose-d/rocky9_pmix-build-image:latest
-  SLURMIMAGE_URL: ghcr.io/jose-d/rocky9_slurm-build-image:latest
+  PMIXIMAGE_URL: ghcr.io/jose-d/images/rocky9_pmix-build:latest
+  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky9_slurm-build:latest
 
 jobs:
   prolog:
