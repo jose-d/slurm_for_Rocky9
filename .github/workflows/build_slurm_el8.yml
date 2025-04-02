@@ -1,6 +1,6 @@
 ---
 
-name: Build Slurm
+name: Build Slurm for EL8
 run-name: ${{ github.actor }} is attempting to build pmix and slurm 🚀
 on: workflow_dispatch
 permissions: write-all
