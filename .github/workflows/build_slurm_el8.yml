@@ -64,7 +64,7 @@ jobs:
       - name: Run tree to inspect content of cwd
         shell: bash
         run: |
-          apt --yes install tree
+          sudo apt --yes install tree
           tree .
 
       - name: Download GLOBAL_VARS_FILE
