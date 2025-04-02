@@ -108,17 +108,27 @@ jobs:
           sparse-checkout-cone-mode: false
           path: .
 
-      - name: Download pmix rpms
+      - name: Download pmix rpms artifacts
         uses: actions/download-artifact@v4
         with:
           name: pmix_rpms
           path: pmix_rpms
 
+      - name: Cache Slurm tarball
+        uses: actions/cache@v4
+        with:
+          path: slurm-${{ env.SLURM_VERSION }}.tar.bz2
+          key: ${{ runner.os }}-slurm-${{ env.SLURM_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-slurm-
+
       - name: Download slurm tarball, unpack, patch spec file
         shell: bash
         run: |
-           wget --quiet https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
-           tar -xf ./slurm*
+           if [ ! -f slurm-${{ env.SLURM_VERSION }}.tar.bz2 ]; then
+            curl -L -o slurm-${{ env.SLURM_VERSION }}.tar.bz2 "https://download.schedmd.com/slurm/slurm-${{ env.SLURM_VERSION }}.tar.bz2"
+           fi
+           tar -xf slurm-${{ env.SLURM_VERSION }}.tar.bz2
            sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
            sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" ./slurm*/slurm.spec
 
