@@ -40,7 +40,7 @@ jobs:
         with:
           sparse-checkout: scripts/build_pmix.sh
           sparse-checkout-cone-mode: false
-          path: scripts
+          path: .
 
       - name: Download pmix tarball, unpack, patch spec file
         shell: bash
@@ -98,7 +98,7 @@ jobs:
         with:
           sparse-checkout: scripts/build_slurm.sh
           sparse-checkout-cone-mode: false
-          path: scripts
+          path: .
 
       - name: Download slurm tarball, unpack, patch spec file
         shell: bash
