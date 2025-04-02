@@ -1,8 +1,8 @@
 # Build of Slurm in Rocky9
 
-RPM build of [Slurm](https://github.com/SchedMD/slurm) and [OpenPMIx](https://github.com/openpmix/openpmix) done by Github actions.
+RPM build of [Slurm](https://github.com/SchedMD/slurm) and [OpenPMIx](https://github.com/openpmix/openpmix) done inside of Docker images by Github actions.
 
-For the build environment, Docker images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
+Images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
 
 ## Acknowledgments:
