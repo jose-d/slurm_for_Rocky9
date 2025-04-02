@@ -87,11 +87,6 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
     steps:
-      - name: Download pmix rpms
-        uses: actions/download-artifact@v4
-        with:
-          name: pmix_rpms
-          path: pmix_rpms
 
       - name: Checkout slurm build script
         uses: actions/checkout@v4
@@ -99,6 +94,12 @@ jobs:
           sparse-checkout: scripts/build_slurm.sh
           sparse-checkout-cone-mode: false
           path: .
+
+      - name: Download pmix rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: pmix_rpms
+          path: pmix_rpms
 
       - name: Download slurm tarball, unpack, patch spec file
         shell: bash
