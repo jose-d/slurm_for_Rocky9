@@ -1,6 +1,6 @@
 # Build of Slurm in Rocky9
 
-RPM build of [Slurm](https://github.com/SchedMD/slurm) and [OpenPMIx](https://github.com/openpmix/openpmix) done inside of Docker images by Github actions.
+This repository automates the process of building the [Slurm](https://github.com/SchedMD/slurm) scheduler with [OpenPMIx](https://github.com/openpmix/openpmix) on [Rocky Linux 9](https://rockylinux.org/), leveraging GitHub Actions for continuous integration and delivery.
 
 Images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
