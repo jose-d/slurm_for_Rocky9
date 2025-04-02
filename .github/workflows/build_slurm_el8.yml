@@ -61,6 +61,12 @@ jobs:
           sparse-checkout-cone-mode: false
           path: scripts
 
+      - name: Run tree to inspect content of cwd
+        shell: bash
+        run: |
+          apt --yes install tree
+          tree .
+
       - name: Download GLOBAL_VARS_FILE
         uses: actions/download-artifact@v4
         with:
