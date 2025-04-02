@@ -59,7 +59,7 @@ jobs:
         with:
           sparse-checkout: scripts/el8/build_pmix.sh
           sparse-checkout-cone-mode: false
-          path: scripts
+          path: .
 
       - name: Run tree to inspect content of cwd
         shell: bash
@@ -123,6 +123,14 @@ jobs:
       GHCR_S: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
+
+      - name: Checkout slurm build script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/el8/build_slurm.sh
+          sparse-checkout-cone-mode: false
+          path: .
+          
       - name: Download GLOBAL_VARS_FILE
         uses: actions/download-artifact@v4
         with:
@@ -133,13 +141,6 @@ jobs:
         with:
           name: pmix_rpms
           path: pmix_rpms
-
-      - name: Checkout slurm build script
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts/el8/build_slurm.sh
-          sparse-checkout-cone-mode: false
-          path: scripts
 
       - name: Download slurm tarball, unpack, patch spec file
         shell: bash
