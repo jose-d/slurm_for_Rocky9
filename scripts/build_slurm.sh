@@ -10,6 +10,10 @@ echo "SLURM_RELTAG: ${SLURM_RELTAG}"
 set -x
 
 # install deps
+dnf -y install tree
+
+tree ${GITHUB_WORKSPACE}
+
 dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/*.rpm
 
 # mkdir for rpmbuild and copy tarball there
