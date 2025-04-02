@@ -1,4 +1,4 @@
-name: Build Slurm
+name: Build Slurm for Rocky9
 run-name: ${{ github.actor }} is attempting to build pmi-x and slurm 🚀
 on: workflow_dispatch
 permissions: write-all
