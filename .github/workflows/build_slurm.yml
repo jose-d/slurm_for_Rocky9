@@ -4,7 +4,7 @@ on: workflow_dispatch
 env:
   # version of openpmix and slurm to download and build together
   PMIX_VERSION: 5.0.7
-  SLURM_VERSION: 24.11.3
+  SLURM_VERSION: 24.11.4
 
   # images used as a build env
   PMIXIMAGE_URL: ghcr.io/jose-d/images/rocky9_pmix-build:latest
