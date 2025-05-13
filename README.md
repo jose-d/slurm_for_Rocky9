@@ -1,4 +1,4 @@
-# Build of Slurm in Rocky9
+# Build of Slurm for Rocky8 and Rocky9
 
 This repository automates the process of building the [Slurm](https://github.com/SchedMD/slurm) scheduler with [OpenPMIx](https://github.com/openpmix/openpmix) on [Rocky Linux 9](https://rockylinux.org/), leveraging GitHub Actions for continuous integration and delivery.
 
