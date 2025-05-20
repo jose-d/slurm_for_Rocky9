@@ -21,7 +21,7 @@ rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
 
 # do rpmbuild
 rpmbuild --define 'build_all_in_one_rpm 0' \
-         --define 'configure_options --disable-per-user-config-files' \
+         --define 'configure_options --with-tests-examples --disable-per-user-config-files' \
          -ba ./pmix-*/contrib/pmix.spec
 
 mkdir "${GITHUB_WORKSPACE}/rpms"
