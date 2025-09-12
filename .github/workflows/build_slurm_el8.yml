@@ -238,8 +238,6 @@ jobs:
         run: |
           source ${GLOBAL_VARS_FILE}
           echo "RELTAG=${RELTAG}" | tee --append $GITHUB_ENV
-
-          sudo apt -y install zstd
           tar -cf rpm_tarball_${RELTAG}.tar.gz rpms/
 
       - name: Create tag
