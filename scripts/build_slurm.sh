@@ -25,6 +25,7 @@ rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms.txt"
 
 # do rpmbuild
 rpmbuild --define '_with_nvml --with-nvml=/usr/local/cuda/targets/x86_64-linux/' \
+         --define '_with_ucx --with_ucx=/usr/' \
           --with pam \
           --with slurmrestd \
           --with hwloc \
@@ -32,7 +33,6 @@ rpmbuild --define '_with_nvml --with-nvml=/usr/local/cuda/targets/x86_64-linux/'
           --with mysql \
           --with numa \
           --with pmix \
-          --with ucx \
           -ba ./slurm-*/slurm.spec
 
 mkdir "${GITHUB_WORKSPACE}/rpms"
