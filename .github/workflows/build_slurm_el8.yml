@@ -207,7 +207,7 @@ jobs:
           name: pmix_rpms
           path: rpms
 
-      - name: Download pmix rpms
+      - name: Download slurm rpms
         uses: actions/download-artifact@v4
         with:
           name: slurm_rpms
