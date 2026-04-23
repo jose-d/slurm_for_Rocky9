@@ -1,190 +1,230 @@
-name: Build Slurm for Rocky9
-run-name: ${{ github.actor }} is attempting to build pmi-x and slurm 🚀
-on: workflow_dispatch
-env:
-  # version of openpmix and slurm to download and build together
-  PMIX_VERSION: 5.0.8
-  SLURM_VERSION: 24.11.5
+name: Build Slurm packages
+run-name: ${{ github.actor }} is building supported pmix/slurm tuples 🚀
 
-  # images used as a build env
-  PMIXIMAGE_URL: ghcr.io/jose-d/images/rocky9_pmix-build:latest
-  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky9_slurm-build:latest
+on: workflow_dispatch
 
 jobs:
   prolog:
-    name: Generate release tag from current datestring
+    name: Generate manifest-driven matrix
     runs-on: ubuntu-latest
-    steps:
-      - name: Create releasetag
-        id: create_releasetag
-        run: |
-          RELTAG="$(date +%Y%m%d%H%M%S)"
-          echo "RELTAG=${RELTAG}" >> "$GITHUB_OUTPUT"
-
     outputs:
-      reltag: ${{ steps.create_releasetag.outputs.RELTAG }}
-      
-  build_pmix:
-    name: Build pmix
+      reltag: ${{ steps.generate.outputs.reltag }}
+      matrix: ${{ steps.generate.outputs.matrix }}
+      release_body: ${{ steps.generate.outputs.release_body }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate matrix and release body from manifest
+        id: generate
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELTAG="$(date +%Y%m%d%H%M%S)"
+          echo "reltag=${RELTAG}" >> "$GITHUB_OUTPUT"
+          python <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(Path("build-manifest.json").read_text())
+          builds = manifest["builds"]
+          matrix = json.dumps({"include": builds}, separators=(",", ":"))
+
+          lines = ["RPMs containing builds of:"]
+          for build in builds:
+              detail = (
+                  f"* {build['distro']}: "
+                  f"[Slurm {build['slurm_version']}](https://slurm.schedmd.com/) + "
+                  f"[PMIx {build['pmix_version']}](https://github.com/openpmix/openpmix)"
+              )
+              nvml_version = build.get("nvml_version")
+              if nvml_version:
+                  detail += f", NVML/CUDA {nvml_version}"
+              lines.append(detail)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={matrix}\n")
+              output.write("release_body<<EOF\n")
+              output.write("\n".join(lines) + "\n")
+              output.write("EOF\n")
+          PY
+
+  build:
+    name: Build ${{ matrix.distro }}
     runs-on: ubuntu-latest
     needs: prolog
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prolog.outputs.matrix) }}
     env:
       GHCR_U: ${{ github.actor }}
       GHCR_S: ${{ secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
-      
+      DISTRO: ${{ matrix.distro }}
+      PMIX_VERSION: ${{ matrix.pmix_version }}
+      SLURM_VERSION: ${{ matrix.slurm_version }}
+      PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
+      SLURMIMAGE_URL: ${{ matrix.slurm_builder_image }}
+      BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
+      SLURM_NVML_PATH: ${{ matrix.slurm_nvml_path || '' }}
+      SLURM_UCX_PATH: ${{ matrix.slurm_ucx_path || '' }}
+      SLURM_WITH_UCX: ${{ matrix.slurm_with_ucx || false }}
+
     steps:
-      - name: checkout pmix build script
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts/build_pmix.sh
-          sparse-checkout-cone-mode: false
-          path: .
 
       - name: Cache PMIx tarball
         uses: actions/cache@v4
         with:
           path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-pmix-${{ env.PMIX_VERSION }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-pmix-
+            ${{ runner.os }}-${{ matrix.distro }}-pmix-
 
       - name: Download PMIx tarball, unpack, patch spec file
         shell: bash
         run: |
-          set -e
-          if [ ! -f pmix-${{ env.PMIX_VERSION }}.tar.bz2 ]; then
-            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${{ env.PMIX_VERSION }}/pmix-${{ env.PMIX_VERSION }}.tar.bz2"
+          set -euo pipefail
+          if [ ! -f "pmix-${PMIX_VERSION}.tar.bz2" ]; then
+            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
           fi
-          tar -xf pmix-${{ env.PMIX_VERSION }}.tar.bz2
-          sed -i "s/^Release.*$/Release: ${{ env.RELTAG }}%{?dist}/g" pmix-*/contrib/pmix.spec
-          
-      - name: Login to ghcr registry with docker and do build
+          tar -xf "pmix-${PMIX_VERSION}.tar.bz2"
+          sed -i "s/^Release.*$/Release: ${RELTAG}%{?dist}/g" pmix-*/contrib/pmix.spec
+
+      - name: Login to ghcr registry with docker and build PMIx
+        shell: bash
         run: |
-          echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run --cidfile /tmp/docker_test.cid \
-                     --env PMIX_RELTAG=${RELTAG} \
-                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
-                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
-                     -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} \
-                     ${PMIXIMAGE_URL} \
-                     /bin/bash scripts/build_pmix.sh | tee pmix_build.log
+                     --env PMIX_RELTAG="${RELTAG}" \
+                     --env PMIX_VERSION="${PMIX_VERSION}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -v "${HOME}:${HOME}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${PMIXIMAGE_URL}" \
+                     /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee "pmix_build_${DISTRO}.log"
 
-      - name: Upload build log as artifact
+      - name: Upload PMIx build log as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pmix_build.log
+          name: ${{ matrix.distro }}-pmix_build.log
           if-no-files-found: error
-          path: ${{ github.workspace }}/pmix_build.log
+          path: ${{ github.workspace }}/pmix_build*.log
 
-      - name: Upload pmix rpms as artifacts
+      - name: Upload PMIx rpm list as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pmix_rpms
+          name: ${{ matrix.distro }}-image_pmix_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_pmix_rpms.txt
+
+      - name: Upload PMIx rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.distro }}-pmix_rpms
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/*.rpm
-
-  build_slurm:
-    name: Build slurm
-    runs-on: ubuntu-latest
-    needs:
-      - build_pmix
-      - prolog
-    env:
-      GHCR_U: ${{ github.actor }}
-      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
-      RELTAG: ${{ needs.prolog.outputs.reltag }}
-
-    steps:
-
-      - name: Checkout slurm build script
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts/build_slurm.sh
-          sparse-checkout-cone-mode: false
-          path: .
-
-      - name: Download pmix rpms artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: pmix_rpms
-          path: pmix_rpms
 
       - name: Cache Slurm tarball
         uses: actions/cache@v4
         with:
           path: slurm-${{ env.SLURM_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-slurm-${{ env.SLURM_VERSION }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-slurm-${{ env.SLURM_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-slurm-
+            ${{ runner.os }}-${{ matrix.distro }}-slurm-
 
-      - name: Download slurm tarball, unpack, patch spec file
+      - name: Download Slurm tarball, unpack, patch spec file
         shell: bash
         run: |
-           if [ ! -f slurm-${{ env.SLURM_VERSION }}.tar.bz2 ]; then
-            curl -L -o slurm-${{ env.SLURM_VERSION }}.tar.bz2 "https://download.schedmd.com/slurm/slurm-${{ env.SLURM_VERSION }}.tar.bz2"
-           fi
-           tar -xf slurm-${{ env.SLURM_VERSION }}.tar.bz2
-           sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
-           sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" ./slurm*/slurm.spec
+          set -euo pipefail
+          if [ ! -f "slurm-${SLURM_VERSION}.tar.bz2" ]; then
+            curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
+          fi
+          tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
+          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
+          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" slurm*/slurm.spec
 
-      - name: Login to ghcr registry with docker and do build
+      - name: Login to ghcr registry with docker and build Slurm
         shell: bash
         run: |
-            set -x
-            echo $GHCR_S | docker login ghcr.io -u ${GHCR_U} --password-stdin
-            docker run --cidfile /tmp/docker_test.cid \
-                     --env SLURM_RELTAG=${RELTAG} \
-                     --env GITHUB_WORKSPACE=${GITHUB_WORKSPACE} \
-                     -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} \
-                     -v ${HOME}:${HOME} \
-                     -w ${GITHUB_WORKSPACE} \
-                     ${SLURMIMAGE_URL} \
-                     /bin/bash scripts/build_slurm.sh | tee slurm_build.log
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          docker run --cidfile /tmp/docker_test.cid \
+                     --env SLURM_RELTAG="${RELTAG}" \
+                     --env SLURM_VERSION="${SLURM_VERSION}" \
+                     --env SLURM_NVML_PATH="${SLURM_NVML_PATH}" \
+                     --env SLURM_UCX_PATH="${SLURM_UCX_PATH}" \
+                     --env SLURM_WITH_UCX="${SLURM_WITH_UCX}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -v "${HOME}:${HOME}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${SLURMIMAGE_URL}" \
+                     /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" | tee "slurm_build_${DISTRO}.log"
 
-      - name: Upload build log as artifact
+      - name: Upload Slurm build log as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: slurm_build.log
+          name: ${{ matrix.distro }}-slurm_build.log
           if-no-files-found: error
-          path: ${{ github.workspace }}/slurm_build.log
-            
-      - name: Upload slurm rpms as artifacts
+          path: ${{ github.workspace }}/slurm_build*.log
+
+      - name: Upload Slurm rpm list as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: slurm_rpms
+          name: ${{ matrix.distro }}-image_slurm_rpms.txt
           if-no-files-found: error
-          path: ${{ github.workspace }}/rpms/*.rpm
+          path: ${{ github.workspace }}/image_slurm_rpms.txt
+
+      - name: Upload Slurm rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.distro }}-slurm_rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/slurm-*.rpm
 
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
     permissions: write-all
     needs:
-      - build_slurm
-      - build_pmix
+      - build
       - prolog
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
     steps:
-      - name: Download pmix rpms
+      - name: Download PMIx rpms
         uses: actions/download-artifact@v4
         with:
-          name: pmix_rpms
-          path: rpms
-          
-      - name: Download pmix rpms
+          pattern: "*-pmix_rpms"
+          path: rpms/pmix
+          merge-multiple: true
+
+      - name: Download Slurm rpms
         uses: actions/download-artifact@v4
         with:
-          name: slurm_rpms
-          path: rpms
-          
-      - name: Read persistent data and add them into env, create tarball from all rpms
+          pattern: "*-slurm_rpms"
+          path: rpms/slurm
+          merge-multiple: true
+
+      - name: Download build logs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-*_build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Create tarball from all rpms
         shell: bash
         run: |
-          tar -cf rpm_tarball_${RELTAG}.tar.gz rpms/
+          set -euo pipefail
+          tar -czf "rpm_tarball_${RELTAG}.tar.gz" rpms/
 
       - name: Create tag
         id: tag_version
@@ -196,19 +236,10 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          body: |
-            RPMs containing build of
-            * [Slurm ${{ env.SLURM_VERSION }}](https://slurm.schedmd.com/) built with NVML/Cuda ${{ env.NVML_VERSION }}
-            * [PMIx ${{ env.PMIX_VERSION }}](https://github.com/openpmix/openpmix)
-            for EL9-like distro.
-
+          body: ${{ needs.prolog.outputs.release_body }}
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
-          name: "slurm-${{ env.SLURM_VERSION }} + pmix-${{ env.PMIX_VERSION }}, (${{ env.RELTAG }})"
+          name: "slurm + pmix builds (${{ env.RELTAG }})"
           fail_on_unmatched_files: true
           files: |
+            logs/*
             rpm_tarball_*.tar.gz
-
-          
-
-
-      

@@ -20,7 +20,21 @@ cp ${GITHUB_WORKSPACE}/slurm-*.tar.bz2 $HOME/rpmbuild/SOURCES/
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms.txt"
 
 # do rpmbuild
-rpmbuild --define '_with_nvml --with-nvml=/usr/local/cuda/targets/x86_64-linux/' \
+rpmbuild_args=()
+
+if [ -n "${SLURM_NVML_PATH:-}" ]; then
+    rpmbuild_args+=(--define "_with_nvml --with-nvml=${SLURM_NVML_PATH}")
+fi
+
+if [ -n "${SLURM_UCX_PATH:-}" ]; then
+    rpmbuild_args+=(--define "_with_ucx --with_ucx=${SLURM_UCX_PATH}")
+fi
+
+if [ "${SLURM_WITH_UCX:-false}" = "true" ]; then
+    rpmbuild_args+=(--with ucx)
+fi
+
+rpmbuild "${rpmbuild_args[@]}" \
           --with pam \
           --with slurmrestd \
           --with hwloc \
@@ -28,10 +42,9 @@ rpmbuild --define '_with_nvml --with-nvml=/usr/local/cuda/targets/x86_64-linux/'
           --with mysql \
           --with numa \
           --with pmix \
-          --with ucx \
           -ba ./slurm-*/slurm.spec &> ${GITHUB_WORKSPACE}/slurm_build.log
 
-mkdir "${GITHUB_WORKSPACE}/rpms"
+mkdir -p "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/slurm-*.rpm "${GITHUB_WORKSPACE}/rpms/"
 
 set +x
