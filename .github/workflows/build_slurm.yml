@@ -114,12 +114,19 @@ jobs:
                      "${PMIXIMAGE_URL}" \
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee "pmix_build_${DISTRO}.log"
 
+      - name: Prepare PMIx rpms for Slurm build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/pmix_rpms"
+          cp "${GITHUB_WORKSPACE}"/rpms/*.rpm "${GITHUB_WORKSPACE}/pmix_rpms/"
+
       - name: Upload PMIx build log as artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.distro }}-pmix_build.log
           if-no-files-found: error
-          path: ${{ github.workspace }}/pmix_build*.log
+          path: ${{ github.workspace }}/pmix_build_${{ matrix.distro }}.log
 
       - name: Upload PMIx rpm list as artifact
         uses: actions/upload-artifact@v4
@@ -177,7 +184,7 @@ jobs:
         with:
           name: ${{ matrix.distro }}-slurm_build.log
           if-no-files-found: error
-          path: ${{ github.workspace }}/slurm_build*.log
+          path: ${{ github.workspace }}/slurm_build_${{ matrix.distro }}.log
 
       - name: Upload Slurm rpm list as artifact
         uses: actions/upload-artifact@v4
