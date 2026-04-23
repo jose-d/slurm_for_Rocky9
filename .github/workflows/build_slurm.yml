@@ -109,7 +109,6 @@ jobs:
                      --env PMIX_VERSION="${PMIX_VERSION}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                      -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-                     -v "${HOME}:${HOME}" \
                      -w "${GITHUB_WORKSPACE}" \
                      "${PMIXIMAGE_URL}" \
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee "pmix_build_${DISTRO}.log"
@@ -174,7 +173,6 @@ jobs:
                      --env SLURM_WITH_UCX="${SLURM_WITH_UCX}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                      -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-                     -v "${HOME}:${HOME}" \
                      -w "${GITHUB_WORKSPACE}" \
                      "${SLURMIMAGE_URL}" \
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" | tee "slurm_build_${DISTRO}.log"
