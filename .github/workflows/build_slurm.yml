@@ -3,14 +3,12 @@ run-name: ${{ github.actor }} is building supported pmix/slurm tuples 🚀
 
 on: workflow_dispatch
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
   prolog:
     name: Generate manifest-driven matrix
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       reltag: ${{ steps.generate.outputs.reltag }}
       matrix: ${{ steps.generate.outputs.matrix }}
@@ -59,6 +57,9 @@ jobs:
     name: Build ${{ matrix.distro }}
     runs-on: ubuntu-latest
     needs: prolog
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prolog.outputs.matrix) }}

@@ -27,7 +27,7 @@ if [ -n "${SLURM_NVML_PATH:-}" ]; then
 fi
 
 if [ -n "${SLURM_UCX_PATH:-}" ]; then
-    rpmbuild_cmd+=(--define "_with_ucx --with-ucx=${SLURM_UCX_PATH}")
+    rpmbuild_cmd+=(--define "_with_ucx --with_ucx=${SLURM_UCX_PATH}")
 fi
 
 if [ "${SLURM_WITH_UCX:-false}" = "true" ]; then
