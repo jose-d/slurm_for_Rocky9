@@ -198,6 +198,25 @@ jobs:
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/slurm-*.rpm
 
+      - name: Detect CUDA version from Slurm builder image
+        shell: bash
+        run: |
+          set -euo pipefail
+          CUDA_VERSION=$(docker run --rm \
+                         -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                         "${SLURMIMAGE_URL}" \
+                         /bin/bash "${GITHUB_WORKSPACE}/scripts/detect_cuda.sh" \
+                         2>/dev/null || echo "unknown")
+          echo "CUDA version for ${DISTRO}: ${CUDA_VERSION}"
+          echo "${CUDA_VERSION}" > "cuda_version_${DISTRO}.txt"
+
+      - name: Upload CUDA version artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.distro }}-cuda_version
+          if-no-files-found: error
+          path: cuda_version_${{ matrix.distro }}.txt
+
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
@@ -210,6 +229,9 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download PMIx rpms
         uses: actions/download-artifact@v4
         with:
@@ -237,6 +259,51 @@ jobs:
           set -euo pipefail
           tar -czf "rpm_tarball_${RELTAG}.tar.gz" rpms/
 
+      - name: Download CUDA version artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-cuda_version"
+          path: cuda_versions
+          merge-multiple: true
+
+      - name: Generate release body with CUDA versions
+        id: release_body
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, os, re
+          from pathlib import Path
+
+          manifest = json.loads(Path("build-manifest.json").read_text())
+          builds = manifest["builds"]
+
+          lines = ["RPMs containing builds of:"]
+          for build in builds:
+              distro = build["distro"]
+              if not re.match(r'^[A-Za-z0-9_-]+$', distro):
+                  raise ValueError(f"Invalid distro name in manifest: {distro!r}")
+              detail = (
+                  f"* {distro}: "
+                  f"[Slurm {build['slurm_version']}](https://slurm.schedmd.com/) + "
+                  f"[PMIx {build['pmix_version']}](https://github.com/openpmix/openpmix)"
+              )
+              cuda_file = Path(f"cuda_versions/cuda_version_{distro}.txt")
+              if cuda_file.exists():
+                  cuda_version = cuda_file.read_text().strip()
+                  if cuda_version and cuda_version != "unknown":
+                      detail += f", CUDA {cuda_version}"
+              elif build.get("nvml_version"):
+                  detail += f", NVML/CUDA {build['nvml_version']}"
+              lines.append(detail)
+
+          body = "\n".join(lines)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write("body<<EOF\n")
+              f.write(body + "\n")
+              f.write("EOF\n")
+          PY
+
       - name: Create tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
@@ -247,7 +314,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          body: ${{ needs.prolog.outputs.release_body }}
+          body: ${{ steps.release_body.outputs.body }}
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: "slurm + pmix builds (${{ env.RELTAG }})"
           fail_on_unmatched_files: true
