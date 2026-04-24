@@ -214,6 +214,23 @@ jobs:
           path: ${{ github.workspace }}/pmix_rpms
           merge-multiple: true
 
+      - name: Flatten downloaded PMIx rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/pmix_rpms"
+          mapfile -t pmix_rpms < <(find "${GITHUB_WORKSPACE}/pmix_rpms" -type f -name '*.rpm')
+          if [ "${#pmix_rpms[@]}" -eq 0 ]; then
+            echo "No PMIx RPMs were downloaded" >&2
+            exit 1
+          fi
+          for rpm in "${pmix_rpms[@]}"; do
+            dest="${GITHUB_WORKSPACE}/pmix_rpms/$(basename "${rpm}")"
+            if [ "${rpm}" != "${dest}" ]; then
+              mv "${rpm}" "${dest}"
+            fi
+          done
+
       - name: Cache Slurm tarball
         uses: actions/cache@v4
         with:
