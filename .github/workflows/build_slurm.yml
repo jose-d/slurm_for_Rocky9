@@ -79,6 +79,7 @@ jobs:
       PMIX_BUILDS_JSON: ${{ matrix.pmix_builds_json }}
       PMIX_VERSIONS_CSV: ${{ matrix.pmix_versions_csv }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
+      SLURM_SPEC_PATH: ./slurm-${{ matrix.slurm_version }}/slurm.spec
       SLURM_PMIX_PATHS: ${{ matrix.pmix_paths }}
       PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
       SLURMIMAGE_URL: ${{ matrix.slurm_builder_image }}
@@ -209,7 +210,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SLURM_SPEC_PATH="./slurm-${SLURM_VERSION}/slurm.spec"
           if [ ! -f "slurm-${SLURM_VERSION}.tar.bz2" ]; then
             curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
           fi
@@ -222,7 +222,6 @@ jobs:
         run: |
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
-          SLURM_SPEC_PATH="./slurm-${SLURM_VERSION}/slurm.spec"
           docker run \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
