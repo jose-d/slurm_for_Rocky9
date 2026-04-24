@@ -22,6 +22,7 @@ rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
 # patch the spec for opt-prefix installs and parallel package names
 python3 <<'PY'
 import os
+import re
 from pathlib import Path
 
 spec_path = Path(f"./pmix-{os.environ['PMIX_VERSION']}/contrib/pmix.spec")
@@ -33,11 +34,13 @@ text = text.replace(
     1,
 )
 
-if "%{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}" not in text:
-    text = text.replace(
-        "%{!?install_in_opt: %define install_in_opt 0}\n",
-        "%{!?install_in_opt: %define install_in_opt 0}\n%{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}\n",
-        1,
+if "opt_prefix_base" not in text:
+    text = re.sub(
+        r"(^%\{\!\?install_in_opt: %define install_in_opt 0\}\n)",
+        r"\1%{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}\n",
+        text,
+        count=1,
+        flags=re.MULTILINE,
     )
 
 for original in (
@@ -52,11 +55,13 @@ for original in (
 ):
     text = text.replace(original, original.replace("/opt/%{name}", "%{opt_prefix_base}"))
 
-if '%if "%{name}" == "pmix"\nProvides: pmix\nProvides: pmix = %{version}\n%endif' not in text:
-    text = text.replace(
-        "Provides: pmix\nProvides: pmix = %{version}",
+if '%if "%{name}" == "pmix"' not in text and "Provides: pmix" in text:
+    text = re.sub(
+        r"^Provides: pmix\s*\n^Provides: pmix = %\{version\}",
         '%if "%{name}" == "pmix"\nProvides: pmix\nProvides: pmix = %{version}\n%endif',
-        1,
+        text,
+        count=1,
+        flags=re.MULTILINE,
     )
 
 spec_path.write_text(text)
