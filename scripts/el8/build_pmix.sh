@@ -19,13 +19,15 @@ cp "${GITHUB_WORKSPACE}/pmix-${PMIX_VERSION}.tar.bz2" "${HOME}/rpmbuild/SOURCES/
 # dump rpmlist for possible forensic
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
 
+PMIX_SPEC_PATH="${PMIX_SPEC_PATH:?PMIX_SPEC_PATH must be set}"
+
 # patch the spec for opt-prefix installs and parallel package names
 python3 <<'PY'
 import os
 import re
 from pathlib import Path
 
-spec_path = Path(f"./pmix-{os.environ['PMIX_VERSION']}/contrib/pmix.spec")
+spec_path = Path(os.environ["PMIX_SPEC_PATH"])
 text = spec_path.read_text()
 
 text = text.replace(
@@ -80,7 +82,7 @@ fi
          --define 'install_modulefile 1' \
          --define "opt_prefix_base ${PMIX_OPT_PREFIX_BASE:-/opt/pmix}" \
          --define "configure_options ${PMIX_CONFIGURE_OPTIONS:---with-tests-examples --disable-per-user-config-files --with-munge=no}" \
-         -ba "./pmix-${PMIX_VERSION}/contrib/pmix.spec"
+         -ba "${PMIX_SPEC_PATH}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/*.rpm ${GITHUB_WORKSPACE}/rpms/

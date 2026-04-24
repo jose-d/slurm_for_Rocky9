@@ -136,6 +136,7 @@ jobs:
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           : > "pmix_build_${DISTRO}.log"
           while IFS=$'\t' read -r PMIX_VERSION PMIX_PACKAGE_NAME PMIX_INSTALL_PATH; do
+            PMIX_SPEC_PATH="./pmix-${PMIX_VERSION}/contrib/pmix.spec"
             echo "::group::Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})"
             echo "Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})" | tee -a "pmix_build_${DISTRO}.log"
             docker run \
@@ -143,6 +144,7 @@ jobs:
                        --env PMIX_VERSION="${PMIX_VERSION}" \
                        --env PMIX_PACKAGE_NAME="${PMIX_PACKAGE_NAME}" \
                        --env PMIX_OPT_PREFIX_BASE="$(dirname "${PMIX_INSTALL_PATH}")" \
+                       --env PMIX_SPEC_PATH="${PMIX_SPEC_PATH}" \
                        --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                        -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
                        -w "${GITHUB_WORKSPACE}" \
@@ -207,21 +209,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          SLURM_SPEC_PATH="./slurm-${SLURM_VERSION}/slurm.spec"
           if [ ! -f "slurm-${SLURM_VERSION}.tar.bz2" ]; then
             curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
           fi
           tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
-          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
-          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" slurm*/slurm.spec
+          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" "${SLURM_SPEC_PATH}"
+          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" "${SLURM_SPEC_PATH}"
 
       - name: Login to ghcr registry with docker and build Slurm
         shell: bash
         run: |
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          SLURM_SPEC_PATH="./slurm-${SLURM_VERSION}/slurm.spec"
           docker run \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
+                     --env SLURM_SPEC_PATH="${SLURM_SPEC_PATH}" \
                      --env SLURM_PMIX_PATHS="${SLURM_PMIX_PATHS}" \
                      --env SLURM_NVML_PATH="${SLURM_NVML_PATH}" \
                      --env SLURM_UCX_PATH="${SLURM_UCX_PATH}" \

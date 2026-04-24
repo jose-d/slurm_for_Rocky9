@@ -19,6 +19,8 @@ cp "${GITHUB_WORKSPACE}/slurm-${SLURM_VERSION}.tar.bz2" "$HOME/rpmbuild/SOURCES/
 # dump rpmlist for possible forensic
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms.txt"
 
+SLURM_SPEC_PATH="${SLURM_SPEC_PATH:?SLURM_SPEC_PATH must be set}"
+
 # do rpmbuild
 rpmbuild_cmd=(rpmbuild)
 
@@ -50,7 +52,7 @@ fi
          --with mysql \
          --with numa \
          --with pmix \
-         -ba "./slurm-${SLURM_VERSION}/slurm.spec"
+         -ba "${SLURM_SPEC_PATH}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/slurm-*.rpm "${GITHUB_WORKSPACE}/rpms/"
