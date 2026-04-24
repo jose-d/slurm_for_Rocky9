@@ -57,6 +57,7 @@
 # type: bool (0/1)
 %{!?install_in_opt: %define install_in_opt 0}
 %{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}
+%{!?reltag: %define reltag 20260206}
 
 # Define this if you want this RPM to install environment setup
 # shell scripts.
@@ -195,7 +196,7 @@
 Summary: An extended/exascale implementation of the PMIx Standard
 Name: %{?_name:%{_name}}%{!?_name:pmix}
 Version: 5.0.10
-Release: 20260206%{?dist}
+Release: %{reltag}%{?dist}
 License: BSD
 Group: Development/Libraries
 Source0: https://github.com/pmix/pmix/releases/download/v%{version}/pmix-%{version}.tar.bz2
@@ -203,8 +204,10 @@ Packager: Josef Dvoracek
 Vendor: %{?_vendorinfo:%{_vendorinfo}}%{!?_vendorinfo:%{_vendor}}
 Distribution: %{?_distribution:%{_distribution}}%{!?_distribution:%{_vendor}}
 Prefix: %{_prefix}
+%if "%{name}" == "pmix"
 Provides: pmix
 Provides: pmix = %{version}
+%endif
 BuildRoot: /var/tmp/%{name}-%{version}-%{release}-root
 BuildRequires: gcc
 BuildRequires: make

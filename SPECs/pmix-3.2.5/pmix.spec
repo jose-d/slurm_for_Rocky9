@@ -56,6 +56,7 @@
 # type: bool (0/1)
 %{!?install_in_opt: %define install_in_opt 0}
 %{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}
+%{!?reltag: %define reltag 20260206}
 
 # Define this if you want this RPM to install environment setup
 # shell scripts.
@@ -194,7 +195,7 @@
 Summary: An extended/exascale implementation of PMI
 Name: %{?_name:%{_name}}%{!?_name:pmix}
 Version: 3.2.5
-Release: 20260206%{?dist}
+Release: %{reltag}%{?dist}
 License: BSD
 Group: Development/Libraries
 Source0: https://github.com/pmix/pmix/releases/download/v%{version}/pmix-%{version}.tar.bz2
