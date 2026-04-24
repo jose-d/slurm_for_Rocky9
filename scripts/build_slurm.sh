@@ -43,16 +43,21 @@ if [ -n "${SLURM_UCX_PATH:-}" ]; then
     rpmbuild_cmd+=(--define "_with_ucx --with-ucx=${SLURM_UCX_PATH}")
 fi
 
-if [ -n "${SLURM_PMIX_PATHS:-}" ]; then
-    rpmbuild_cmd+=(--define "_with_pmix --with-pmix=${SLURM_PMIX_PATHS}")
-fi
-
 if [ "${SLURM_WITH_RPATH:-false}" = "true" ]; then
     rpmbuild_cmd+=(--define "_with_cflags --with-rpath")
 fi
 
 if [ "${SLURM_WITH_UCX:-false}" = "true" ]; then
     rpmbuild_cmd+=(--with ucx)
+fi
+
+# Build the pmix path define separately so it can be placed after --with pmix.
+# RPM's --with pmix sets _with_pmix to "--with-pmix" (no path), which would
+# override an earlier --define. Placing the path define after --with pmix
+# ensures configure receives --with-pmix=<paths> pointing to the opt installs.
+pmix_path_args=()
+if [ -n "${SLURM_PMIX_PATHS:-}" ]; then
+    pmix_path_args=(--define "_with_pmix --with-pmix=${SLURM_PMIX_PATHS}")
 fi
 
 "${rpmbuild_cmd[@]}" \
@@ -63,6 +68,7 @@ fi
         --with mysql \
         --with numa \
         --with pmix \
+        "${pmix_path_args[@]}" \
         -ba "${SLURM_SPEC_PATH}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
