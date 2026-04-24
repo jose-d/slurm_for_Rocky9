@@ -4,7 +4,7 @@ This repository automates the process of building the [Slurm](https://github.com
 
 Container images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
-Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the full matrix from a single workflow definition.
+Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the full matrix from a single workflow definition. Each tuple can stage multiple PMIx builds for a single Slurm build; the current manifest builds Slurm 25.05.6 against PMIx 3.2.5 and PMIx 5.0.10.
 
 ## Acknowledgments
 
