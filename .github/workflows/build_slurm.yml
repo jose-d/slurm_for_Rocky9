@@ -36,6 +36,7 @@ jobs:
               pmix_builds = build["pmix_builds"]
               build["pmix_builds_json"] = json.dumps(pmix_builds, separators=(",", ":"))
               build["pmix_versions_csv"] = ",".join(item["version"] for item in pmix_builds)
+              build["pmix_versions_cache_key"] = "-".join(item["version"] for item in pmix_builds)
               build["pmix_paths"] = ":".join(item["install_path"] for item in pmix_builds)
               build["pmix_release_label"] = " + ".join(
                   f"PMIx {item['version']}" for item in pmix_builds
@@ -78,6 +79,7 @@ jobs:
       DISTRO: ${{ matrix.distro }}
       PMIX_BUILDS_JSON: ${{ matrix.pmix_builds_json }}
       PMIX_VERSIONS_CSV: ${{ matrix.pmix_versions_csv }}
+      PMIX_VERSIONS_CACHE_KEY: ${{ matrix.pmix_versions_cache_key }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
       SLURM_SPEC_PATH: ./slurm-${{ matrix.slurm_version }}/slurm.spec
       SLURM_PMIX_PATHS: ${{ matrix.pmix_paths }}
@@ -98,7 +100,7 @@ jobs:
         with:
           path: |
             pmix-*.tar.bz2
-          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSIONS_CSV }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSIONS_CACHE_KEY }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.distro }}-pmix-
 
