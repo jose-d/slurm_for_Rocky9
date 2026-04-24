@@ -6,6 +6,8 @@ Container images from the [jose-d/images](https://github.com/jose-d/images) repo
 
 Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the full matrix from a single workflow definition. Each tuple can stage multiple PMIx builds for a single Slurm build; the current manifest builds Slurm 25.05.6 against PMIx 3.2.5 and PMIx 5.0.10.
 
+If the workflow needs to pull private GHCR images from `jose-d/images`, define an optional repository variable `GHCR_U` and a matching repository secret `GHCR_S`; otherwise the workflow falls back to the current repository owner and `GITHUB_TOKEN`.
+
 ## Acknowledgments
 
 I was inspired by the work done by the [c3se](https://github.com/c3se) team, as showcased in their [repository](https://github.com/c3se/containers/tree/master/rpm-builds). Additionally, I greatly benefited from the advice shared by the community on the EasyBuild Slack and from the [insightful talk](https://github.com/easybuilders/easybuild/wiki/EasyBuild-tech-talks-I:-Open-MPI) organized by EasyBuild, which can be found on their [Tech Talks](https://easybuild.io/tech-talks/) page.
