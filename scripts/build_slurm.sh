@@ -4,16 +4,12 @@
 set -e
 
 # print input vars
-echo "SLURM_RELTAG: ${SLURM_RELTAG}"
+echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 
 # enable shell debug
 set -x
 
 # install deps
-dnf -y install tree
-
-tree ${GITHUB_WORKSPACE}
-
 dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/*.rpm
 
 # mkdir for rpmbuild and copy tarball there

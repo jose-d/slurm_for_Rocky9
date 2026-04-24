@@ -2,7 +2,7 @@
   "builds": [
     {
       "distro": "el8",
-      "script_dir": "scripts/el8",
+      "script_dir": "scripts",
       "pmix_builds": [
         {
           "version": "3.2.5",
