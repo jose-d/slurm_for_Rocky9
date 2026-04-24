@@ -18,6 +18,7 @@ dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/*.rpm
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
+SLURM_VERSION="${SLURM_VERSION:?SLURM_VERSION must be set}"
 cp "${GITHUB_WORKSPACE}/slurm-${SLURM_VERSION}.tar.bz2" "$HOME/rpmbuild/SOURCES/"
 
 # dump rpmlist for possible forensic
