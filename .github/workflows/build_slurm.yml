@@ -104,8 +104,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prolog.outputs.pmix_matrix) }}
     env:
-      GHCR_U: ${{ github.actor }}
-      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
+      GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
       PMIX_VERSION: ${{ matrix.pmix_version }}
@@ -189,8 +189,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prolog.outputs.matrix) }}
     env:
-      GHCR_U: ${{ github.actor }}
-      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
+      GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
