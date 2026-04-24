@@ -231,6 +231,12 @@ jobs:
             fi
           done
 
+      - name: Print downloaded PMIx rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          find "${GITHUB_WORKSPACE}/pmix_rpms" -maxdepth 1 -type f -name '*.rpm' -print | sort
+
       - name: Cache Slurm tarball
         uses: actions/cache@v5
         with:
