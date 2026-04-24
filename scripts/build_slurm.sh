@@ -13,7 +13,7 @@ echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 set -x
 
 # install deps
-dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/*.rpm
+dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/pmix-5*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix-devel-5*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix3-3*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix3-devel-3*.rpm
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
