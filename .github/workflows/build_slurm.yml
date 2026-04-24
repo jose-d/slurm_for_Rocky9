@@ -169,7 +169,7 @@ jobs:
                         ]
                     )
                 )
-PY
+          PY
           )
 
       - name: Prepare PMIx rpms for Slurm build
