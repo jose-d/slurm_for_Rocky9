@@ -104,7 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
-          docker run --cidfile /tmp/docker_test.cid \
+          docker run \
                      --env PMIX_RELTAG="${RELTAG}" \
                      --env PMIX_VERSION="${PMIX_VERSION}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
@@ -165,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
-          docker run --cidfile /tmp/docker_test.cid \
+          docker run \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
                      --env SLURM_NVML_PATH="${SLURM_NVML_PATH}" \
