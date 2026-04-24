@@ -13,7 +13,15 @@ echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 set -x
 
 # install deps
-dnf -y install ${GITHUB_WORKSPACE}/pmix_rpms/pmix-5*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix-devel-5*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix3-3*.rpm ${GITHUB_WORKSPACE}/pmix_rpms/pmix3-devel-3*.rpm
+cat > /etc/yum.repos.d/pmix-local.repo << EOF
+[pmix-local]
+name=Local PMIx RPMs
+baseurl=file://${GITHUB_WORKSPACE}/pmix_rpms
+enabled=1
+gpgcheck=0
+EOF
+
+dnf -y --disablerepo='*' --enablerepo='pmix-local' install pmix pmix-devel pmix3 pmix3-devel
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
