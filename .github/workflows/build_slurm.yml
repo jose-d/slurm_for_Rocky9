@@ -32,6 +32,14 @@ jobs:
 
           manifest = json.loads(Path("build-manifest.json").read_text())
           builds = manifest["builds"]
+          for build in builds:
+              pmix_builds = build["pmix_builds"]
+              build["pmix_builds_json"] = json.dumps(pmix_builds, separators=(",", ":"))
+              build["pmix_versions_csv"] = ",".join(item["version"] for item in pmix_builds)
+              build["pmix_paths"] = ":".join(item["install_path"] for item in pmix_builds)
+              build["pmix_release_label"] = " + ".join(
+                  f"PMIx {item['version']}" for item in pmix_builds
+              )
           matrix = json.dumps({"include": builds}, separators=(",", ":"))
 
           lines = ["RPMs containing builds of:"]
@@ -39,7 +47,7 @@ jobs:
               detail = (
                   f"* {build['distro']}: "
                   f"[Slurm {build['slurm_version']}](https://slurm.schedmd.com/) + "
-                  f"[PMIx {build['pmix_version']}](https://github.com/openpmix/openpmix)"
+                  f"{build['pmix_release_label']}"
               )
               nvml_version = build.get("nvml_version")
               if nvml_version:
@@ -68,14 +76,18 @@ jobs:
       GHCR_S: ${{ secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
-      PMIX_VERSION: ${{ matrix.pmix_version }}
+      PMIX_BUILDS_JSON: ${{ matrix.pmix_builds_json }}
+      PMIX_VERSIONS_CSV: ${{ matrix.pmix_versions_csv }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
+      SLURM_SPEC_PATH: ./slurm-${{ matrix.slurm_version }}/slurm.spec
+      SLURM_PMIX_PATHS: ${{ matrix.pmix_paths }}
       PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
       SLURMIMAGE_URL: ${{ matrix.slurm_builder_image }}
       BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
       SLURM_NVML_PATH: ${{ matrix.slurm_nvml_path || '' }}
       SLURM_UCX_PATH: ${{ matrix.slurm_ucx_path || '' }}
       SLURM_WITH_UCX: ${{ matrix.slurm_with_ucx || false }}
+      SLURM_WITH_RPATH: ${{ matrix.slurm_with_rpath || false }}
 
     steps:
       - name: Checkout repository
@@ -84,34 +96,79 @@ jobs:
       - name: Cache PMIx tarball
         uses: actions/cache@v4
         with:
-          path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}
+          path: |
+            pmix-*.tar.bz2
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSIONS_CSV }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.distro }}-pmix-
 
-      - name: Download PMIx tarball, unpack, patch spec file
+      - name: Download PMIx tarballs and unpack them
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f "pmix-${PMIX_VERSION}.tar.bz2" ]; then
-            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
-          fi
-          tar -xf "pmix-${PMIX_VERSION}.tar.bz2"
-          sed -i "s/^Release.*$/Release: ${RELTAG}%{?dist}/g" pmix-*/contrib/pmix.spec
+          python <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          for build in json.loads(os.environ["PMIX_BUILDS_JSON"]):
+              version = build["version"]
+              tarball = Path(f"pmix-{version}.tar.bz2")
+              if not tarball.exists():
+                  subprocess.run(
+                      [
+                          "wget",
+                          "--quiet",
+                          f"https://github.com/openpmix/openpmix/releases/download/v{version}/pmix-{version}.tar.bz2",
+                      ],
+                      check=True,
+                  )
+              source_dir = Path(f"pmix-{version}")
+              if source_dir.exists():
+                  subprocess.run(["rm", "-rf", str(source_dir)], check=True)
+              subprocess.run(["tar", "-xf", str(tarball)], check=True)
+          PY
 
       - name: Login to ghcr registry with docker and build PMIx
         shell: bash
         run: |
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
-          docker run \
-                     --env PMIX_RELTAG="${RELTAG}" \
-                     --env PMIX_VERSION="${PMIX_VERSION}" \
-                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
-                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-                     -w "${GITHUB_WORKSPACE}" \
-                     "${PMIXIMAGE_URL}" \
-                     /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee "pmix_build_${DISTRO}.log"
+          : > "pmix_build_${DISTRO}.log"
+          while IFS=$'\t' read -r PMIX_VERSION PMIX_PACKAGE_NAME PMIX_INSTALL_PATH; do
+            PMIX_SPEC_PATH="./pmix-${PMIX_VERSION}/contrib/pmix.spec"
+            echo "::group::Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})"
+            echo "Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})" | tee -a "pmix_build_${DISTRO}.log"
+            docker run \
+                       --env PMIX_RELTAG="${RELTAG}" \
+                       --env PMIX_VERSION="${PMIX_VERSION}" \
+                       --env PMIX_PACKAGE_NAME="${PMIX_PACKAGE_NAME}" \
+                       --env PMIX_OPT_PREFIX_BASE="$(dirname "${PMIX_INSTALL_PATH}")" \
+                       --env PMIX_SPEC_PATH="${PMIX_SPEC_PATH}" \
+                       --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                       -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                       -w "${GITHUB_WORKSPACE}" \
+                       "${PMIXIMAGE_URL}" \
+                       /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee -a "pmix_build_${DISTRO}.log"
+            echo "::endgroup::"
+          done < <(
+            python <<'PY'
+            import json
+            import os
+
+            for build in json.loads(os.environ["PMIX_BUILDS_JSON"]):
+                print(
+                    "\t".join(
+                        [
+                            build["version"],
+                            build.get("package_name", "pmix"),
+                            build["install_path"],
+                        ]
+                    )
+                )
+            PY
+          )
 
       - name: Prepare PMIx rpms for Slurm build
         shell: bash
@@ -157,8 +214,8 @@ jobs:
             curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
           fi
           tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
-          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" slurm*/slurm.spec
-          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" slurm*/slurm.spec
+          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" "${SLURM_SPEC_PATH}"
+          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" "${SLURM_SPEC_PATH}"
 
       - name: Login to ghcr registry with docker and build Slurm
         shell: bash
@@ -168,9 +225,12 @@ jobs:
           docker run \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
+                     --env SLURM_SPEC_PATH="${SLURM_SPEC_PATH}" \
+                     --env SLURM_PMIX_PATHS="${SLURM_PMIX_PATHS}" \
                      --env SLURM_NVML_PATH="${SLURM_NVML_PATH}" \
                      --env SLURM_UCX_PATH="${SLURM_UCX_PATH}" \
                      --env SLURM_WITH_UCX="${SLURM_WITH_UCX}" \
+                     --env SLURM_WITH_RPATH="${SLURM_WITH_RPATH}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                      -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
                      -w "${GITHUB_WORKSPACE}" \
