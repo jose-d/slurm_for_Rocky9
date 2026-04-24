@@ -14,6 +14,7 @@ set -e
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
+PMIX_RELTAG="${PMIX_RELTAG:?PMIX_RELTAG must be set}"
 PMIX_VERSION="${PMIX_VERSION:?PMIX_VERSION must be set}"
 cp "${GITHUB_WORKSPACE}/pmix-${PMIX_VERSION}.tar.bz2" "${HOME}/rpmbuild/SOURCES/"
 
