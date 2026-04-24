@@ -12,6 +12,7 @@ jobs:
     outputs:
       reltag: ${{ steps.generate.outputs.reltag }}
       matrix: ${{ steps.generate.outputs.matrix }}
+      pmix_matrix: ${{ steps.generate.outputs.pmix_matrix }}
       release_body: ${{ steps.generate.outputs.release_body }}
 
     steps:
@@ -32,16 +33,45 @@ jobs:
 
           manifest = json.loads(Path("build-manifest.json").read_text())
           builds = manifest["builds"]
+          pmix_matrix_entries = []
           for build in builds:
               pmix_builds = build["pmix_builds"]
-              build["pmix_builds_json"] = json.dumps(pmix_builds, separators=(",", ":"))
-              build["pmix_versions_csv"] = ",".join(item["version"] for item in pmix_builds)
-              build["pmix_versions_cache_key"] = "-".join(item["version"] for item in pmix_builds)
               build["pmix_paths"] = ":".join(item["install_path"] for item in pmix_builds)
               build["pmix_release_label"] = " + ".join(
                   f"PMIx {item['version']}" for item in pmix_builds
               )
+              for item in pmix_builds:
+                  pmix_matrix_entries.append(
+                      {
+                          "distro": build["distro"],
+                          "pmix_version": item["version"],
+                          "pmix_package_name": item.get("package_name", "pmix"),
+                          "pmix_install_path": item["install_path"],
+                          "pmix_builder_image": build["pmix_builder_image"],
+                          "script_dir": build["script_dir"],
+                          "pmix_artifact_suffix": (
+                              f"{build['distro']}-pmix-"
+                              f"{item.get('package_name', 'pmix')}-{item['version']}"
+                          ),
+                          "slurm_version": build["slurm_version"],
+                      }
+                  )
           matrix = json.dumps({"include": builds}, separators=(",", ":"))
+          suffix_counts = {}
+          for entry in pmix_matrix_entries:
+              suffix = entry["pmix_artifact_suffix"]
+              suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
+          for entry in pmix_matrix_entries:
+              suffix = entry["pmix_artifact_suffix"]
+              if suffix_counts[suffix] > 1:
+                  entry["pmix_artifact_suffix"] = (
+                      f"{suffix}-slurm-{entry['slurm_version']}"
+                  )
+              del entry["slurm_version"]
+          pmix_matrix = json.dumps(
+              {"include": pmix_matrix_entries},
+              separators=(",", ":"),
+          )
 
           lines = ["RPMs containing builds of:"]
           for build in builds:
@@ -57,15 +87,103 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"matrix={matrix}\n")
+              output.write(f"pmix_matrix={pmix_matrix}\n")
               output.write("release_body<<EOF\n")
               output.write("\n".join(lines) + "\n")
               output.write("EOF\n")
           PY
 
-  build:
-    name: Build ${{ matrix.distro }}
+  build_pmix:
+    name: Build PMIx ${{ matrix.distro }} ${{ matrix.pmix_version }}
     runs-on: ubuntu-latest
     needs: prolog
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prolog.outputs.pmix_matrix) }}
+    env:
+      GHCR_U: ${{ github.actor }}
+      GHCR_S: ${{ secrets.GITHUB_TOKEN }}
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+      DISTRO: ${{ matrix.distro }}
+      PMIX_VERSION: ${{ matrix.pmix_version }}
+      PMIX_PACKAGE_NAME: ${{ matrix.pmix_package_name }}
+      PMIX_INSTALL_PATH: ${{ matrix.pmix_install_path }}
+      PMIX_SPEC_PATH: ./SPECs/pmix-${{ matrix.pmix_version }}/pmix.spec
+      PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
+      BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
+      PMIX_ARTIFACT_SUFFIX: ${{ matrix.pmix_artifact_suffix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Cache PMIx tarball
+        uses: actions/cache@v4
+        with:
+          path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.distro }}-pmix-
+
+      - name: Download PMIx tarball and unpack it
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "pmix-${PMIX_VERSION}.tar.bz2" ]; then
+            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
+          fi
+          rm -rf "pmix-${PMIX_VERSION}"
+          tar -xf "pmix-${PMIX_VERSION}.tar.bz2"
+
+      - name: Login to ghcr registry with docker and build PMIx
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          docker run \
+                     --env PMIX_RELTAG="${RELTAG}" \
+                     --env PMIX_VERSION="${PMIX_VERSION}" \
+                     --env PMIX_PACKAGE_NAME="${PMIX_PACKAGE_NAME}" \
+                     --env PMIX_OPT_PREFIX_BASE="$(dirname "${PMIX_INSTALL_PATH}")" \
+                     --env PMIX_SPEC_PATH="${PMIX_SPEC_PATH}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${PMIXIMAGE_URL}" \
+                     /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" 2>&1 | tee "pmix_build_${DISTRO}_${PMIX_VERSION}.log"
+          docker_status=${PIPESTATUS[0]}
+          exit "${docker_status}"
+
+      - name: Upload PMIx build log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/pmix_build_${{ matrix.distro }}_${{ matrix.pmix_version }}.log
+
+      - name: Upload PMIx rpm list as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-image_pmix_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_pmix_rpms.txt
+
+      - name: Upload PMIx rpms as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
+  build_slurm:
+    name: Build ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    needs:
+      - prolog
+      - build_pmix
     permissions:
       contents: read
       packages: read
@@ -77,13 +195,9 @@ jobs:
       GHCR_S: ${{ secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
-      PMIX_BUILDS_JSON: ${{ matrix.pmix_builds_json }}
-      PMIX_VERSIONS_CSV: ${{ matrix.pmix_versions_csv }}
-      PMIX_VERSIONS_CACHE_KEY: ${{ matrix.pmix_versions_cache_key }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
       SLURM_SPEC_PATH: ./slurm-${{ matrix.slurm_version }}/slurm.spec
       SLURM_PMIX_PATHS: ${{ matrix.pmix_paths }}
-      PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
       SLURMIMAGE_URL: ${{ matrix.slurm_builder_image }}
       BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
       SLURM_NVML_PATH: ${{ matrix.slurm_nvml_path || '' }}
@@ -95,110 +209,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Cache PMIx tarball
-        uses: actions/cache@v4
+      - name: Download PMIx rpms for current distro
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            pmix-*.tar.bz2
-          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSIONS_CACHE_KEY }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.distro }}-pmix-
-
-      - name: Download PMIx tarballs and unpack them
-        shell: bash
-        run: |
-          set -euo pipefail
-          python <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          for build in json.loads(os.environ["PMIX_BUILDS_JSON"]):
-              version = build["version"]
-              tarball = Path(f"pmix-{version}.tar.bz2")
-              if not tarball.exists():
-                  subprocess.run(
-                      [
-                          "wget",
-                          "--quiet",
-                          f"https://github.com/openpmix/openpmix/releases/download/v{version}/pmix-{version}.tar.bz2",
-                      ],
-                      check=True,
-                  )
-              source_dir = Path(f"pmix-{version}")
-              if source_dir.exists():
-                  subprocess.run(["rm", "-rf", str(source_dir)], check=True)
-              subprocess.run(["tar", "-xf", str(tarball)], check=True)
-          PY
-
-      - name: Login to ghcr registry with docker and build PMIx
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
-          : > "pmix_build_${DISTRO}.log"
-          while IFS=$'\t' read -r PMIX_VERSION PMIX_PACKAGE_NAME PMIX_INSTALL_PATH; do
-            PMIX_SPEC_PATH="./SPECs/pmix-${PMIX_VERSION}/pmix.spec"
-            echo "::group::Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})"
-            echo "Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})" | tee -a "pmix_build_${DISTRO}.log"
-            docker run \
-                       --env PMIX_RELTAG="${RELTAG}" \
-                       --env PMIX_VERSION="${PMIX_VERSION}" \
-                       --env PMIX_PACKAGE_NAME="${PMIX_PACKAGE_NAME}" \
-                       --env PMIX_OPT_PREFIX_BASE="$(dirname "${PMIX_INSTALL_PATH}")" \
-                       --env PMIX_SPEC_PATH="${PMIX_SPEC_PATH}" \
-                       --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
-                       -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-                       -w "${GITHUB_WORKSPACE}" \
-                       "${PMIXIMAGE_URL}" \
-                       /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" | tee -a "pmix_build_${DISTRO}.log"
-            echo "::endgroup::"
-          done < <(
-            python <<'PY'
-            import json
-            import os
-
-            for build in json.loads(os.environ["PMIX_BUILDS_JSON"]):
-                print(
-                    "\t".join(
-                        [
-                            build["version"],
-                            build.get("package_name", "pmix"),
-                            build["install_path"],
-                        ]
-                    )
-                )
-          PY
-          )
-
-      - name: Prepare PMIx rpms for Slurm build
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${GITHUB_WORKSPACE}/pmix_rpms"
-          cp "${GITHUB_WORKSPACE}"/rpms/*.rpm "${GITHUB_WORKSPACE}/pmix_rpms/"
-
-      - name: Upload PMIx build log as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.distro }}-pmix_build.log
-          if-no-files-found: error
-          path: ${{ github.workspace }}/pmix_build_${{ matrix.distro }}.log
-
-      - name: Upload PMIx rpm list as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.distro }}-image_pmix_rpms.txt
-          if-no-files-found: error
-          path: ${{ github.workspace }}/image_pmix_rpms.txt
-
-      - name: Upload PMIx rpms as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.distro }}-pmix_rpms
-          if-no-files-found: error
-          path: ${{ github.workspace }}/rpms/*.rpm
+          pattern: ${{ matrix.distro }}-pmix-*-rpms
+          path: ${{ github.workspace }}/pmix_rpms
+          merge-multiple: true
 
       - name: Cache Slurm tarball
         uses: actions/cache@v4
@@ -233,11 +249,13 @@ jobs:
                      --env SLURM_UCX_PATH="${SLURM_UCX_PATH}" \
                      --env SLURM_WITH_UCX="${SLURM_WITH_UCX}" \
                      --env SLURM_WITH_RPATH="${SLURM_WITH_RPATH}" \
-                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
-                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-                     -w "${GITHUB_WORKSPACE}" \
-                     "${SLURMIMAGE_URL}" \
-                     /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" | tee "slurm_build_${DISTRO}.log"
+                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                      -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                      -w "${GITHUB_WORKSPACE}" \
+                      "${SLURMIMAGE_URL}" \
+                      /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" 2>&1 | tee "slurm_build_${DISTRO}.log"
+          docker_status=${PIPESTATUS[0]}
+          exit "${docker_status}"
 
       - name: Upload Slurm build log as artifact
         uses: actions/upload-artifact@v4
@@ -266,8 +284,9 @@ jobs:
     permissions:
       contents: write
     needs:
-      - build
       - prolog
+      - build_pmix
+      - build_slurm
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
@@ -275,7 +294,7 @@ jobs:
       - name: Download PMIx rpms
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-pmix_rpms"
+          pattern: "*-pmix-*-rpms"
           path: rpms/pmix
           merge-multiple: true
 
@@ -286,10 +305,17 @@ jobs:
           path: rpms/slurm
           merge-multiple: true
 
-      - name: Download build logs
+      - name: Download PMIx build logs
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-*_build.log"
+          pattern: "*-pmix-*-build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Download Slurm build logs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-slurm_build.log"
           path: logs
           merge-multiple: true
 
