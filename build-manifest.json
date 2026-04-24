@@ -24,7 +24,7 @@
       "slurm_with_rpath": true
     },
     {
-      "distro": "rocky9",
+      "distro": "el9",
       "script_dir": "scripts",
       "pmix_builds": [
         {
