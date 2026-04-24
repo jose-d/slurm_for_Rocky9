@@ -33,6 +33,15 @@ jobs:
 
           manifest = json.loads(Path("build-manifest.json").read_text())
           builds = manifest["builds"]
+          suffix_counts = {}
+          for build in builds:
+              for item in build["pmix_builds"]:
+                  suffix = (
+                      f"{build['distro']}-pmix-"
+                      f"{item.get('package_name', 'pmix')}-{item['version']}"
+                  )
+                  suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
+
           pmix_matrix_entries = []
           for build in builds:
               pmix_builds = build["pmix_builds"]
@@ -41,6 +50,12 @@ jobs:
                   f"PMIx {item['version']}" for item in pmix_builds
               )
               for item in pmix_builds:
+                  suffix = (
+                      f"{build['distro']}-pmix-"
+                      f"{item.get('package_name', 'pmix')}-{item['version']}"
+                  )
+                  if suffix_counts[suffix] > 1:
+                      suffix = f"{suffix}-slurm-{build['slurm_version']}"
                   pmix_matrix_entries.append(
                       {
                           "distro": build["distro"],
@@ -49,25 +64,10 @@ jobs:
                           "pmix_install_path": item["install_path"],
                           "pmix_builder_image": build["pmix_builder_image"],
                           "script_dir": build["script_dir"],
-                          "pmix_artifact_suffix": (
-                              f"{build['distro']}-pmix-"
-                              f"{item.get('package_name', 'pmix')}-{item['version']}"
-                          ),
-                          "slurm_version": build["slurm_version"],
+                          "pmix_artifact_suffix": suffix,
                       }
                   )
           matrix = json.dumps({"include": builds}, separators=(",", ":"))
-          suffix_counts = {}
-          for entry in pmix_matrix_entries:
-              suffix = entry["pmix_artifact_suffix"]
-              suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
-          for entry in pmix_matrix_entries:
-              suffix = entry["pmix_artifact_suffix"]
-              if suffix_counts[suffix] > 1:
-                  entry["pmix_artifact_suffix"] = (
-                      f"{suffix}-slurm-{entry['slurm_version']}"
-                  )
-              del entry["slurm_version"]
           pmix_matrix = json.dumps(
               {"include": pmix_matrix_entries},
               separators=(",", ":"),
@@ -154,8 +154,6 @@ jobs:
                      -w "${GITHUB_WORKSPACE}" \
                      "${PMIXIMAGE_URL}" \
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" 2>&1 | tee "pmix_build_${DISTRO}_${PMIX_VERSION}.log"
-          docker_status=${PIPESTATUS[0]}
-          exit "${docker_status}"
 
       - name: Upload PMIx build log as artifact
         uses: actions/upload-artifact@v4
@@ -254,8 +252,6 @@ jobs:
                       -w "${GITHUB_WORKSPACE}" \
                       "${SLURMIMAGE_URL}" \
                       /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" 2>&1 | tee "slurm_build_${DISTRO}.log"
-          docker_status=${PIPESTATUS[0]}
-          exit "${docker_status}"
 
       - name: Upload Slurm build log as artifact
         uses: actions/upload-artifact@v4
