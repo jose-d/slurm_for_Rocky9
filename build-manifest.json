@@ -16,8 +16,8 @@
         }
       ],
       "slurm_version": "25.05.6",
-      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build@sha256:9c8ceb80a9b63d1edf7fb41e8d94575dd88ed36873328e9744f67d24495a6af4",
-      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build@sha256:b59f856e0c74de46b869d730d9b7a3cb837307139c2d8a2110a419e9ada80932",
+      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build:latest",
+      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build:latest",
       "nvml_version": "13-0",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_with_ucx": true,
@@ -39,8 +39,8 @@
         }
       ],
       "slurm_version": "25.05.6",
-      "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build@sha256:72211e049118cc815ce448feeeb7a3e93ac173a4d10033c3fa1ee1c13d287cd8",
-      "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build@sha256:95fcd2cfb1c67419f59e861e9a6d122475d09f6e09c5013370cdcd9768f2eafb",
+      "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build:latest",
+      "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build:latest",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_ucx_path": false,
       "slurm_with_rpath": true
