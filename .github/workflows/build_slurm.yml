@@ -139,7 +139,7 @@ jobs:
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           : > "pmix_build_${DISTRO}.log"
           while IFS=$'\t' read -r PMIX_VERSION PMIX_PACKAGE_NAME PMIX_INSTALL_PATH; do
-            PMIX_SPEC_PATH="./pmix-${PMIX_VERSION}/contrib/pmix.spec"
+            PMIX_SPEC_PATH="./SPECs/pmix-${PMIX_VERSION}/pmix.spec"
             echo "::group::Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})"
             echo "Building PMIx ${PMIX_VERSION} (${PMIX_PACKAGE_NAME})" | tee -a "pmix_build_${DISTRO}.log"
             docker run \
@@ -169,7 +169,7 @@ jobs:
                         ]
                     )
                 )
-            PY
+PY
           )
 
       - name: Prepare PMIx rpms for Slurm build
