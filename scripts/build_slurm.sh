@@ -21,7 +21,7 @@ enabled=1
 gpgcheck=0
 EOF
 
-dnf -y install pmix pmix-devel pmix3 pmix3-devel
+dnf -y --disablerepo='*' --enablerepo='pmix-local' install pmix pmix-devel pmix3 pmix3-devel
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
