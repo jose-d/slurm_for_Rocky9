@@ -57,6 +57,8 @@
 # type: bool (0/1)
 %{!?install_in_opt: %define install_in_opt 0}
 %{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}
+# Define this to override the RPM Release: tag.
+# type: string
 %{!?reltag: %define reltag 20260206}
 
 # Define this if you want this RPM to install environment setup
