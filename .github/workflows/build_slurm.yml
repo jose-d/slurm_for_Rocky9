@@ -121,7 +121,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Cache PMIx tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
           key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}
@@ -156,21 +156,21 @@ jobs:
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" 2>&1 | tee "pmix_build_${DISTRO}_${PMIX_VERSION}.log"
 
       - name: Upload PMIx build log as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/pmix_build_${{ matrix.distro }}_${{ matrix.pmix_version }}.log
 
       - name: Upload PMIx rpm list as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-image_pmix_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_pmix_rpms.txt
 
       - name: Upload PMIx rpms as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-rpms
           if-no-files-found: error
@@ -208,7 +208,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Download PMIx rpms for current distro
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: ${{ matrix.distro }}-pmix-*-rpms
           path: ${{ github.workspace }}/pmix_rpms
@@ -232,7 +232,7 @@ jobs:
           done
 
       - name: Cache Slurm tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: slurm-${{ env.SLURM_VERSION }}.tar.bz2
           key: ${{ runner.os }}-${{ matrix.distro }}-slurm-${{ env.SLURM_VERSION }}
@@ -271,21 +271,21 @@ jobs:
                       /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" 2>&1 | tee "slurm_build_${DISTRO}.log"
 
       - name: Upload Slurm build log as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.distro }}-slurm_build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/slurm_build_${{ matrix.distro }}.log
 
       - name: Upload Slurm rpm list as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.distro }}-image_slurm_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_slurm_rpms.txt
 
       - name: Upload Slurm rpms as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.distro }}-slurm_rpms
           if-no-files-found: error
@@ -305,28 +305,28 @@ jobs:
 
     steps:
       - name: Download PMIx rpms
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-pmix-*-rpms"
           path: rpms/pmix
           merge-multiple: true
 
       - name: Download Slurm rpms
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-slurm_rpms"
           path: rpms/slurm
           merge-multiple: true
 
       - name: Download PMIx build logs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-pmix-*-build.log"
           path: logs
           merge-multiple: true
 
       - name: Download Slurm build logs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-slurm_build.log"
           path: logs
