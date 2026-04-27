@@ -65,14 +65,21 @@ if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
     fi
 fi
 
+rpmbuild_args=(
+        --with pam
+        --with slurmrestd
+        --with hwloc
+        --with lua
+        --with mysql
+        --with numa
+)
+
+if [ "${#pmix_args[@]}" -gt 0 ]; then
+    rpmbuild_args+=("${pmix_args[@]}")
+fi
+
 "${rpmbuild_cmd[@]}" \
-        --with pam \
-        --with slurmrestd \
-        --with hwloc \
-        --with lua \
-        --with mysql \
-        --with numa \
-        "${pmix_args[@]}" \
+        "${rpmbuild_args[@]}" \
         -ba "${SLURM_SPEC_PATH}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"

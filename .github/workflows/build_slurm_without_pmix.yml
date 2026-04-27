@@ -143,18 +143,12 @@ jobs:
           set -euo pipefail
           tar -czf "rpm_tarball_${RELTAG}.tar.gz" rpms/
 
-      - name: Create tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create release and add assets
         id: create_release
         uses: softprops/action-gh-release@v3
         with:
           body: ${{ needs.prolog.outputs.release_body }}
-          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          tag_name: no-pmix-${{ env.RELTAG }}
           name: "slurm builds without pmix (${{ env.RELTAG }})"
           fail_on_unmatched_files: true
           files: |
