@@ -6,6 +6,8 @@ Container images from the [jose-d/images](https://github.com/jose-d/images) repo
 
 Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the full matrix from a single workflow definition. Each tuple can stage multiple PMIx builds for a single Slurm build; the current manifest builds Slurm 25.05.6 against PMIx 3.2.5 and PMIx 5.0.10.
 
+For Rocky8/EL8 clusters that do not need PMIx or InfiniBand support, the repository also provides a separate `Build Slurm packages without PMIx` workflow. It builds Slurm from `ghcr.io/jose-d/images/rocky8_slurm-build:latest` with NVML/CUDA support enabled and skips the PMIx dependency entirely.
+
 If the workflow needs to pull private GHCR images from `jose-d/images`, define an optional repository variable `GHCR_U` and a matching repository secret `GHCR_S`; otherwise the workflow falls back to the current repository owner and `GITHUB_TOKEN`.
 
 ## Acknowledgments

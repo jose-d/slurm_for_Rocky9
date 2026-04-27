@@ -12,8 +12,9 @@ echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 # enable shell debug
 set -x
 
-# install deps
-cat > /etc/yum.repos.d/pmix-local.repo << EOF
+if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
+    # install deps
+    cat > /etc/yum.repos.d/pmix-local.repo << EOF
 [pmix-local]
 name=Local PMIx RPMs
 baseurl=file://${GITHUB_WORKSPACE}/pmix_rpms
@@ -21,7 +22,8 @@ enabled=1
 gpgcheck=0
 EOF
 
-dnf -y install pmix pmix-devel pmix3 pmix3-devel
+    dnf -y install pmix pmix-devel pmix3 pmix3-devel
+fi
 
 # mkdir for rpmbuild and copy tarball there
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
@@ -55,20 +57,29 @@ fi
 # RPM's --with pmix sets _with_pmix to "--with-pmix" (no path), which would
 # override an earlier --define. Placing the path define after --with pmix
 # ensures configure receives --with-pmix=<paths> pointing to the opt installs.
-pmix_path_args=()
-if [ -n "${SLURM_PMIX_PATHS:-}" ]; then
-    pmix_path_args=(--define "_with_pmix --with-pmix=${SLURM_PMIX_PATHS}")
+pmix_args=()
+if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
+    pmix_args+=(--with pmix)
+    if [ -n "${SLURM_PMIX_PATHS:-}" ]; then
+        pmix_args+=(--define "_with_pmix --with-pmix=${SLURM_PMIX_PATHS}")
+    fi
+fi
+
+rpmbuild_args=(
+        --with pam
+        --with slurmrestd
+        --with hwloc
+        --with lua
+        --with mysql
+        --with numa
+)
+
+if [ "${#pmix_args[@]}" -gt 0 ]; then
+    rpmbuild_args+=("${pmix_args[@]}")
 fi
 
 "${rpmbuild_cmd[@]}" \
-        --with pam \
-        --with slurmrestd \
-        --with hwloc \
-        --with lua \
-        --with mysql \
-        --with numa \
-        --with pmix \
-        "${pmix_path_args[@]}" \
+        "${rpmbuild_args[@]}" \
         -ba "${SLURM_SPEC_PATH}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
