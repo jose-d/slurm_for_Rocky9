@@ -3,6 +3,9 @@ run-name: ${{ github.actor }} is building supported pmix/slurm tuples 🚀
 
 on: workflow_dispatch
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   prolog:
     name: Generate manifest-driven matrix
@@ -362,7 +365,7 @@ jobs:
 
       - name: Create release and add assets
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body: ${{ needs.prolog.outputs.release_body }}
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
