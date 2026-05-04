@@ -41,7 +41,7 @@ grep -Fq '%{!?opt_prefix_base: %define opt_prefix_base' "${PMIX_SPEC_PATH}" \
     || { echo "Spec patch failed: opt_prefix_base default not inserted (upstream spec may have changed)" >&2; exit 1; }
 
 # 2. Insert reltag default after the opt_prefix_base default line
-sed -i '|^%{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}|a %{!?reltag: %define reltag 1}' "${PMIX_SPEC_PATH}"
+sed -i '/^%{!?opt_prefix_base: %define opt_prefix_base \/opt\/pmix}/a %{!?reltag: %define reltag 1}' "${PMIX_SPEC_PATH}"
 
 # 3. Override Release to use the datetime reltag
 sed -i 's/^Release: .*$/Release: %{reltag}%{?dist}/' "${PMIX_SPEC_PATH}"
@@ -58,13 +58,21 @@ sed -i '/^Provides: pmix = %{version}$/a %endif' "${PMIX_SPEC_PATH}"
 for required_spec_marker in \
     '%{!?reltag: %define reltag ' \
     'Release: %{reltag}%{?dist}' \
-    '%if "%{name}" == "pmix"'
+    '%{opt_prefix_base}' \
+    '%if "%{name}" == "pmix"' \
+    '%endif'
 do
     if ! grep -Fq "${required_spec_marker}" "${PMIX_SPEC_PATH}"; then
         echo "Spec patch failed (missing: ${required_spec_marker})" >&2
         exit 1
     fi
 done
+
+# Verify that no hardcoded /opt/%{name} path remains after patch #4
+if grep -Fq '/opt/%{name}' "${PMIX_SPEC_PATH}"; then
+    echo "Spec patch failed: hardcoded /opt/%{name} path still present after substitution" >&2
+    exit 1
+fi
 
 # dump rpmlist for possible forensic
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
