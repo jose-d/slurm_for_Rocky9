@@ -63,6 +63,7 @@ jobs:
                       {
                           "distro": build["distro"],
                           "pmix_version": item["version"],
+                          "pmix_srcrpm_release": item.get("pmix_srcrpm_release", "1"),
                           "pmix_package_name": item.get("package_name", "pmix"),
                           "pmix_install_path": item["install_path"],
                           "pmix_builder_image": build["pmix_builder_image"],
@@ -112,9 +113,9 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
       PMIX_VERSION: ${{ matrix.pmix_version }}
+      PMIX_SRCRPM_RELEASE: ${{ matrix.pmix_srcrpm_release }}
       PMIX_PACKAGE_NAME: ${{ matrix.pmix_package_name }}
       PMIX_INSTALL_PATH: ${{ matrix.pmix_install_path }}
-      PMIX_SPEC_PATH: ./SPECs/pmix-${{ matrix.pmix_version }}/pmix.spec
       PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
       BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
       PMIX_ARTIFACT_SUFFIX: ${{ matrix.pmix_artifact_suffix }}
@@ -123,23 +124,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Cache PMIx tarball
+      - name: Cache PMIx src.rpm
         uses: actions/cache@v5
         with:
-          path: pmix-${{ env.PMIX_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}
+          path: pmix-${{ env.PMIX_VERSION }}-${{ env.PMIX_SRCRPM_RELEASE }}.src.rpm
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}-${{ env.PMIX_SRCRPM_RELEASE }}-srcrpm
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.distro }}-pmix-
+            ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}-
 
-      - name: Download PMIx tarball and unpack it
+      - name: Download PMIx src.rpm
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f "pmix-${PMIX_VERSION}.tar.bz2" ]; then
-            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2"
+          SRCRPM="pmix-${PMIX_VERSION}-${PMIX_SRCRPM_RELEASE}.src.rpm"
+          if [ ! -f "${SRCRPM}" ]; then
+            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/${SRCRPM}"
           fi
-          rm -rf "pmix-${PMIX_VERSION}"
-          tar -xf "pmix-${PMIX_VERSION}.tar.bz2"
 
       - name: Login to ghcr registry with docker and build PMIx
         shell: bash
@@ -149,9 +149,9 @@ jobs:
           docker run \
                      --env PMIX_RELTAG="${RELTAG}" \
                      --env PMIX_VERSION="${PMIX_VERSION}" \
+                     --env PMIX_SRCRPM_RELEASE="${PMIX_SRCRPM_RELEASE}" \
                      --env PMIX_PACKAGE_NAME="${PMIX_PACKAGE_NAME}" \
                      --env PMIX_OPT_PREFIX_BASE="$(dirname "${PMIX_INSTALL_PATH}")" \
-                     --env PMIX_SPEC_PATH="${PMIX_SPEC_PATH}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                      -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
                      -w "${GITHUB_WORKSPACE}" \

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # print input vars
-echo "PMIX_RELTAG: ${PMIX_RELTAG}, PMIX_VERSION: ${PMIX_VERSION}, PMIX_PACKAGE_NAME: ${PMIX_PACKAGE_NAME:-pmix}"
+echo "PMIX_RELTAG: ${PMIX_RELTAG}, PMIX_VERSION: ${PMIX_VERSION}, PMIX_SRCRPM_RELEASE: ${PMIX_SRCRPM_RELEASE}, PMIX_PACKAGE_NAME: ${PMIX_PACKAGE_NAME:-pmix}"
 
 # enable shell debug
 set -x
@@ -14,27 +14,57 @@ set -e
 
 PMIX_RELTAG="${PMIX_RELTAG:?PMIX_RELTAG must be set}"
 PMIX_VERSION="${PMIX_VERSION:?PMIX_VERSION must be set}"
-PMIX_SPEC_PATH="${PMIX_SPEC_PATH:?PMIX_SPEC_PATH must be set}"
+PMIX_SRCRPM_RELEASE="${PMIX_SRCRPM_RELEASE:?PMIX_SRCRPM_RELEASE must be set}"
 
-if [ ! -f "${PMIX_SPEC_PATH}" ]; then
-    echo "PMIX_SPEC_PATH does not exist: ${PMIX_SPEC_PATH}" >&2
+PMIX_SRCRPM="${GITHUB_WORKSPACE}/pmix-${PMIX_VERSION}-${PMIX_SRCRPM_RELEASE}.src.rpm"
+
+if [ ! -f "${PMIX_SRCRPM}" ]; then
+    echo "src.rpm not found: ${PMIX_SRCRPM}" >&2
     exit 1
 fi
 
+# Install the src.rpm; this populates ~/rpmbuild/SOURCES with the tarball
+# and ~/rpmbuild/SPECS with the upstream spec file.
+rpm -i "${PMIX_SRCRPM}"
+
+PMIX_SPEC_PATH="${HOME}/rpmbuild/SPECS/pmix.spec"
+
+# Patch the upstream spec to support the shared opt_prefix_base layout,
+# the datetime-based reltag, and the conditional Provides used when the
+# package is renamed (e.g. pmix3).
+# Note: sed address delimiters are '|' when the pattern itself contains '/'
+# to avoid escaping, and '/' otherwise.
+
+# 1. Insert opt_prefix_base default after the install_in_opt default line
+sed -i '/^%{!?install_in_opt: %define install_in_opt 0}/a %{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}' "${PMIX_SPEC_PATH}"
+grep -Fq '%{!?opt_prefix_base: %define opt_prefix_base' "${PMIX_SPEC_PATH}" \
+    || { echo "Spec patch failed: opt_prefix_base default not inserted (upstream spec may have changed)" >&2; exit 1; }
+
+# 2. Insert reltag default after the opt_prefix_base default line
+sed -i '|^%{!?opt_prefix_base: %define opt_prefix_base /opt/pmix}|a %{!?reltag: %define reltag 1}' "${PMIX_SPEC_PATH}"
+
+# 3. Override Release to use the datetime reltag
+sed -i 's/^Release: .*$/Release: %{reltag}%{?dist}/' "${PMIX_SPEC_PATH}"
+
+# 4. Replace hardcoded /opt/%{name} paths with the configurable %{opt_prefix_base}
+sed -i 's|/opt/%{name}|%{opt_prefix_base}|g' "${PMIX_SPEC_PATH}"
+
+# 5. Wrap 'Provides: pmix' lines in a conditional so renamed packages
+#    (e.g. pmix3) do not emit those provides
+sed -i '/^Provides: pmix$/i %if "%{name}" == "pmix"' "${PMIX_SPEC_PATH}"
+sed -i '/^Provides: pmix = %{version}$/a %endif' "${PMIX_SPEC_PATH}"
+
+# Validate that all required patches were applied
 for required_spec_marker in \
     '%{!?reltag: %define reltag ' \
     'Release: %{reltag}%{?dist}' \
     '%if "%{name}" == "pmix"'
 do
     if ! grep -Fq "${required_spec_marker}" "${PMIX_SPEC_PATH}"; then
-        echo "PMIX_SPEC_PATH must point to the parameterized repo spec (missing: ${required_spec_marker})" >&2
+        echo "Spec patch failed (missing: ${required_spec_marker})" >&2
         exit 1
     fi
 done
-
-# mkdir for rpmbuild and copy tarball there
-mkdir -p "${HOME}/rpmbuild/SOURCES/"
-cp "${GITHUB_WORKSPACE}/pmix-${PMIX_VERSION}.tar.bz2" "${HOME}/rpmbuild/SOURCES/"
 
 # dump rpmlist for possible forensic
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
