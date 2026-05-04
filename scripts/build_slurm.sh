@@ -34,11 +34,120 @@ rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms.txt"
 
 SLURM_SPEC_PATH="${SLURM_SPEC_PATH:?SLURM_SPEC_PATH must be set}"
 
+prepare_nvml_prefix() {
+    local requested_path="$1"
+    local -a header_candidates=()
+    local -a library_candidates=()
+    local header_path=""
+    local library_path=""
+    local versioned_cuda_root
+
+    if [ -n "${requested_path}" ]; then
+        header_candidates+=(
+            "${requested_path%/}/include/nvml.h"
+            "${requested_path%/}/targets/x86_64-linux/include/nvml.h"
+        )
+        library_candidates+=(
+            "${requested_path%/}/lib64/stubs/libnvidia-ml.so"
+            "${requested_path%/}/lib/stubs/libnvidia-ml.so"
+            "${requested_path%/}/lib64/libnvidia-ml.so"
+            "${requested_path%/}/lib/libnvidia-ml.so"
+            "${requested_path%/}/targets/x86_64-linux/lib64/stubs/libnvidia-ml.so"
+            "${requested_path%/}/targets/x86_64-linux/lib/stubs/libnvidia-ml.so"
+            "${requested_path%/}/targets/x86_64-linux/lib64/libnvidia-ml.so"
+            "${requested_path%/}/targets/x86_64-linux/lib/libnvidia-ml.so"
+        )
+    fi
+
+    header_candidates+=(
+        /usr/local/cuda/targets/x86_64-linux/include/nvml.h
+        /usr/include/nvml.h
+    )
+    library_candidates+=(
+        /usr/local/cuda/targets/x86_64-linux/lib64/stubs/libnvidia-ml.so
+        /usr/local/cuda/targets/x86_64-linux/lib/stubs/libnvidia-ml.so
+        /usr/local/cuda/targets/x86_64-linux/lib64/libnvidia-ml.so
+        /usr/local/cuda/targets/x86_64-linux/lib/libnvidia-ml.so
+        /usr/lib64/libnvidia-ml.so
+    )
+
+    for versioned_cuda_root in /usr/local/cuda-*; do
+        case "${versioned_cuda_root}" in
+            *'*'*)
+                continue
+                ;;
+        esac
+        [ -d "${versioned_cuda_root}" ] || continue
+        header_candidates+=(
+            "${versioned_cuda_root}/targets/x86_64-linux/include/nvml.h"
+        )
+        library_candidates+=(
+            "${versioned_cuda_root}/targets/x86_64-linux/lib64/stubs/libnvidia-ml.so"
+            "${versioned_cuda_root}/targets/x86_64-linux/lib/stubs/libnvidia-ml.so"
+            "${versioned_cuda_root}/targets/x86_64-linux/lib64/libnvidia-ml.so"
+            "${versioned_cuda_root}/targets/x86_64-linux/lib/libnvidia-ml.so"
+        )
+    done
+
+    for candidate in "${header_candidates[@]}"; do
+        if [ -f "${candidate}" ]; then
+            header_path="${candidate}"
+            break
+        fi
+    done
+
+    for candidate in "${library_candidates[@]}"; do
+        if [ -f "${candidate}" ]; then
+            library_path="${candidate}"
+            break
+        fi
+    done
+
+    if [ -z "${header_path}" ] || [ -z "${library_path}" ]; then
+        echo "Unable to resolve NVML header/library paths" >&2
+        echo "Requested NVML path: ${requested_path}" >&2
+        echo "Resolved header: ${header_path:-missing}" >&2
+        echo "Resolved library: ${library_path:-missing}" >&2
+        return 1
+    fi
+
+    local nvml_prefix
+    if ! nvml_prefix="$(mktemp -d)"; then
+        echo "Unable to create temporary NVML staging directory" >&2
+        return 1
+    fi
+    if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib/stubs" "${nvml_prefix}/lib64/stubs"; then
+        echo "Unable to create staged NVML prefix: ${nvml_prefix}" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h"; then
+        echo "Unable to stage NVML header into: ${nvml_prefix}" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${library_path}" "${nvml_prefix}/lib/stubs/libnvidia-ml.so"; then
+        echo "Unable to stage NVML stub library into: ${nvml_prefix}/lib/stubs" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${library_path}" "${nvml_prefix}/lib64/stubs/libnvidia-ml.so"; then
+        echo "Unable to stage NVML stub library into: ${nvml_prefix}/lib64/stubs" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    echo "${nvml_prefix}"
+}
+
 # do rpmbuild
 rpmbuild_cmd=(rpmbuild)
 
 if [ -n "${SLURM_NVML_PATH:-}" ]; then
-    rpmbuild_cmd+=(--define "_with_nvml --with-nvml=${SLURM_NVML_PATH}")
+    if ! SLURM_NVML_PREFIX="$(prepare_nvml_prefix "${SLURM_NVML_PATH}")"; then
+        exit 1
+    fi
+    trap 'if [ -n "${SLURM_NVML_PREFIX:-}" ] && [ -d "${SLURM_NVML_PREFIX}" ]; then rm -rf "${SLURM_NVML_PREFIX}"; fi' EXIT
+    rpmbuild_cmd+=(--define "_with_nvml --with-nvml=${SLURM_NVML_PREFIX}")
 fi
 
 if [ -n "${SLURM_UCX_PATH:-}" ]; then
