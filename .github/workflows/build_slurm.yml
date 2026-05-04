@@ -351,11 +351,36 @@ jobs:
           path: logs
           merge-multiple: true
 
-      - name: Create tarball from all rpms
+      - name: Create distro tarballs from rpms
         shell: bash
         run: |
           set -euo pipefail
-          tar -czf "rpm_tarball_${RELTAG}.tar.gz" rpms/
+          mapfile -t distros < <(
+            find rpms -type f -name '*.rpm' -exec basename '{}' ';' \
+              | awk -F. '{for (i = 1; i <= NF; i++) if ($i ~ /^el[0-9]+$/) print $i}' \
+              | sort -u
+          )
+
+          if [ "${#distros[@]}" -eq 0 ]; then
+            echo "No distro-specific RPM suffixes matching *.el[0-9]+.*.rpm were found under rpms/" >&2
+            exit 1
+          fi
+
+          staging_root="$(mktemp -d)"
+          trap 'rm -rf "${staging_root}"' EXIT
+
+          for distro in "${distros[@]}"; do
+            distro_stage="${staging_root}/${distro}"
+            mkdir -p "${distro_stage}/rpms"
+
+            while IFS= read -r -d '' rpm; do
+              rpm_dir="$(dirname "${rpm}")"
+              mkdir -p "${distro_stage}/${rpm_dir}"
+              cp "${rpm}" "${distro_stage}/${rpm_dir}/"
+            done < <(find rpms -type f -name "*.${distro}.*.rpm" -print0)
+
+            tar -czf "rpm_tarball_${distro}_${RELTAG}.tar.gz" -C "${distro_stage}" rpms
+          done
 
       - name: Create tag
         id: tag_version
