@@ -115,10 +115,15 @@ prepare_nvml_prefix() {
     if ! nvml_prefix="$(mktemp -d)"; then
         return 1
     fi
-    if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib/stubs" "${nvml_prefix}/lib64/stubs" \
-        || ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h" \
+    if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib/stubs" "${nvml_prefix}/lib64/stubs"; then
+        echo "Unable to create staged NVML prefix: ${nvml_prefix}" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h" \
         || ! ln -sf "${library_path}" "${nvml_prefix}/lib/stubs/libnvidia-ml.so" \
         || ! ln -sf "${library_path}" "${nvml_prefix}/lib64/stubs/libnvidia-ml.so"; then
+        echo "Unable to stage NVML header/library into: ${nvml_prefix}" >&2
         rm -rf "${nvml_prefix}"
         return 1
     fi
