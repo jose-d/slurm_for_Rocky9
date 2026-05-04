@@ -362,7 +362,7 @@ jobs:
           )
 
           if [ "${#distros[@]}" -eq 0 ]; then
-            echo "No distro-specific RPM suffixes were found under rpms/" >&2
+            echo "No distro-specific RPM suffixes matching *.el[0-9]+.*.rpm were found under rpms/" >&2
             exit 1
           fi
 
