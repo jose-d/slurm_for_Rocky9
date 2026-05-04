@@ -120,10 +120,18 @@ prepare_nvml_prefix() {
         rm -rf "${nvml_prefix}"
         return 1
     fi
-    if ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h" \
-        || ! ln -sf "${library_path}" "${nvml_prefix}/lib/stubs/libnvidia-ml.so" \
-        || ! ln -sf "${library_path}" "${nvml_prefix}/lib64/stubs/libnvidia-ml.so"; then
-        echo "Unable to stage NVML header/library into: ${nvml_prefix}" >&2
+    if ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h"; then
+        echo "Unable to stage NVML header into: ${nvml_prefix}" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${library_path}" "${nvml_prefix}/lib/stubs/libnvidia-ml.so"; then
+        echo "Unable to stage NVML stub library into: ${nvml_prefix}/lib/stubs" >&2
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
+    if ! ln -sf "${library_path}" "${nvml_prefix}/lib64/stubs/libnvidia-ml.so"; then
+        echo "Unable to stage NVML stub library into: ${nvml_prefix}/lib64/stubs" >&2
         rm -rf "${nvml_prefix}"
         return 1
     fi
