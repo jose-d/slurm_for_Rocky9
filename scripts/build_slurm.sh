@@ -117,7 +117,9 @@ prepare_nvml_prefix() {
 rpmbuild_cmd=(rpmbuild)
 
 if [ -n "${SLURM_NVML_PATH:-}" ]; then
-    SLURM_NVML_PREFIX="$(prepare_nvml_prefix "${SLURM_NVML_PATH}")"
+    if ! SLURM_NVML_PREFIX="$(prepare_nvml_prefix "${SLURM_NVML_PATH}")"; then
+        exit 1
+    fi
     trap 'if [ -n "${SLURM_NVML_PREFIX:-}" ] && [ -d "${SLURM_NVML_PREFIX}" ]; then rm -rf "${SLURM_NVML_PREFIX}"; fi' EXIT
     rpmbuild_cmd+=(--define "_with_nvml --with-nvml=${SLURM_NVML_PREFIX}")
 fi
