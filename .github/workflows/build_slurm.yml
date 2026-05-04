@@ -357,7 +357,7 @@ jobs:
           set -euo pipefail
           mapfile -t distros < <(
             find rpms -type f -name '*.rpm' -exec basename '{}' ';' \
-              | awk -F. '{for (i = 1; i <= NF; ++i) if ($i ~ /^el[0-9]+$/) print $i}' \
+              | awk -F. '{for (i = 1; i <= NF; i++) if ($i ~ /^el[0-9]+$/) print $i}' \
               | sort -u
           )
 
@@ -371,7 +371,7 @@ jobs:
 
           for distro in "${distros[@]}"; do
             distro_stage="${staging_root}/${distro}"
-            mkdir -p "${distro_stage}"
+            mkdir -p "${distro_stage}/rpms"
 
             while IFS= read -r -d '' rpm; do
               rpm_dir="$(dirname "${rpm}")"
