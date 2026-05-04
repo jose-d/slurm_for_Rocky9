@@ -23,11 +23,24 @@ if [ ! -f "${PMIX_SRCRPM}" ]; then
     exit 1
 fi
 
+mapfile -t PMIX_SPEC_FILES < <(rpm -qpl "${PMIX_SRCRPM}" | awk '/\\.spec$/ {print $1}')
+
+if [ "${#PMIX_SPEC_FILES[@]}" -ne 1 ]; then
+    echo "Expected exactly one spec file in ${PMIX_SRCRPM}, found ${#PMIX_SPEC_FILES[@]}" >&2
+    printf 'Spec entries:\n%s\n' "${PMIX_SPEC_FILES[*]:-<none>}" >&2
+    exit 1
+fi
+
 # Install the src.rpm; this populates ~/rpmbuild/SOURCES with the tarball
 # and ~/rpmbuild/SPECS with the upstream spec file.
 rpm -i "${PMIX_SRCRPM}"
 
-PMIX_SPEC_PATH="${HOME}/rpmbuild/SPECS/pmix.spec"
+PMIX_SPEC_PATH="${HOME}/rpmbuild/SPECS/$(basename "${PMIX_SPEC_FILES[0]}")"
+
+if [ ! -f "${PMIX_SPEC_PATH}" ]; then
+    echo "Installed spec file not found: ${PMIX_SPEC_PATH}" >&2
+    exit 1
+fi
 
 # Patch the upstream spec to support the shared opt_prefix_base layout,
 # the datetime-based reltag, and the conditional Provides used when the
