@@ -356,7 +356,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t distros < <(
-            find rpms -type f -name '*.rpm' -printf '%f\n' \
+            find rpms -type f -name '*.rpm' -exec basename '{}' ';' \
               | awk -F. '{for (i = 1; i <= NF; ++i) if ($i ~ /^el[0-9]+$/) print $i}' \
               | sort -u
           )
@@ -371,11 +371,12 @@ jobs:
 
           for distro in "${distros[@]}"; do
             distro_stage="${staging_root}/${distro}"
-            mkdir -p "${distro_stage}/rpms/pmix" "${distro_stage}/rpms/slurm"
+            mkdir -p "${distro_stage}"
 
             while IFS= read -r -d '' rpm; do
-              mkdir -p "${distro_stage}/$(dirname "${rpm}")"
-              cp "${rpm}" "${distro_stage}/$(dirname "${rpm}")/"
+              rpm_dir="$(dirname "${rpm}")"
+              mkdir -p "${distro_stage}/${rpm_dir}"
+              cp "${rpm}" "${distro_stage}/${rpm_dir}/"
             done < <(find rpms -type f -name "*.${distro}.*.rpm" -print0)
 
             tar -czf "rpm_tarball_${distro}_${RELTAG}.tar.gz" -C "${distro_stage}" rpms
