@@ -6,11 +6,13 @@
       "pmix_builds": [
         {
           "version": "3.2.5",
+          "pmix_srcrpm_release": "1",
           "package_name": "pmix3",
           "install_path": "/opt/pmix/3.2.5"
         },
         {
           "version": "5.0.10",
+          "pmix_srcrpm_release": "1",
           "package_name": "pmix",
           "install_path": "/opt/pmix/5.0.10"
         }
@@ -29,11 +31,13 @@
       "pmix_builds": [
         {
           "version": "3.2.5",
+          "pmix_srcrpm_release": "1",
           "package_name": "pmix3",
           "install_path": "/opt/pmix/3.2.5"
         },
         {
           "version": "5.0.10",
+          "pmix_srcrpm_release": "1",
           "package_name": "pmix",
           "install_path": "/opt/pmix/5.0.10"
         }
