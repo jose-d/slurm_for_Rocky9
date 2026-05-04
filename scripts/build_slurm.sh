@@ -69,6 +69,11 @@ prepare_nvml_prefix() {
     )
 
     for versioned_cuda_root in /usr/local/cuda-*; do
+        case "${versioned_cuda_root}" in
+            *'*'*)
+                continue
+                ;;
+        esac
         [ -d "${versioned_cuda_root}" ] || continue
         header_candidates+=(
             "${versioned_cuda_root}/targets/x86_64-linux/include/nvml.h"
