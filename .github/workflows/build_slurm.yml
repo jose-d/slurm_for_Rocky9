@@ -357,7 +357,7 @@ jobs:
           set -euo pipefail
           mapfile -t distros < <(
             find rpms -type f -name '*.rpm' -printf '%f\n' \
-              | sed -n 's/.*\.\(el[0-9][0-9]*\)\..*/\1/p' \
+              | awk -F. '{for (i = 1; i <= NF; ++i) if ($i ~ /^el[0-9]+$/) print $i}' \
               | sort -u
           )
 
@@ -374,6 +374,7 @@ jobs:
             mkdir -p "${distro_stage}/rpms/pmix" "${distro_stage}/rpms/slurm"
 
             while IFS= read -r -d '' rpm; do
+              mkdir -p "${distro_stage}/$(dirname "${rpm}")"
               cp "${rpm}" "${distro_stage}/$(dirname "${rpm}")/"
             done < <(find rpms -type f -name "*.${distro}.*.rpm" -print0)
 
