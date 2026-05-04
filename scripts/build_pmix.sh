@@ -27,7 +27,12 @@ mapfile -t PMIX_SPEC_FILES < <(rpm -qpl "${PMIX_SRCRPM}" | awk '/\.spec$/')
 
 if [ "${#PMIX_SPEC_FILES[@]}" -ne 1 ]; then
     echo "Expected exactly one spec file in ${PMIX_SRCRPM}, found ${#PMIX_SPEC_FILES[@]}" >&2
-    printf 'Spec entries:\n%s\n' "${PMIX_SPEC_FILES[*]:-<none>}" >&2
+    printf 'Spec entries:\n' >&2
+    if [ "${#PMIX_SPEC_FILES[@]}" -eq 0 ]; then
+        printf '%s\n' '<none>' >&2
+    else
+        printf '%s\n' "${PMIX_SPEC_FILES[@]}" >&2
+    fi
     exit 1
 fi
 
