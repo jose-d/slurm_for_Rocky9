@@ -103,10 +103,13 @@ prepare_nvml_prefix() {
     fi
 
     local nvml_prefix
-    nvml_prefix="$(mktemp -d /tmp/slurm-nvml.XXXXXX)"
-    mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib64"
-    ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h"
-    ln -sf "${library_path}" "${nvml_prefix}/lib64/libnvidia-ml.so"
+    nvml_prefix="$(mktemp -d)"
+    if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib64" \
+        || ! ln -sf "${header_path}" "${nvml_prefix}/include/nvml.h" \
+        || ! ln -sf "${library_path}" "${nvml_prefix}/lib64/libnvidia-ml.so"; then
+        rm -rf "${nvml_prefix}"
+        return 1
+    fi
     echo "${nvml_prefix}"
 }
 
