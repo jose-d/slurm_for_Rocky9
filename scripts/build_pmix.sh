@@ -23,7 +23,7 @@ if [ ! -f "${PMIX_SRCRPM}" ]; then
     exit 1
 fi
 
-mapfile -t PMIX_SPEC_FILES < <(rpm -qpl "${PMIX_SRCRPM}" | awk '/\\.spec$/ {print $1}')
+mapfile -t PMIX_SPEC_FILES < <(rpm -qpl "${PMIX_SRCRPM}" | awk '/\.spec$/')
 
 if [ "${#PMIX_SPEC_FILES[@]}" -ne 1 ]; then
     echo "Expected exactly one spec file in ${PMIX_SRCRPM}, found ${#PMIX_SPEC_FILES[@]}" >&2
