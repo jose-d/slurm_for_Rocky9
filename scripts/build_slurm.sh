@@ -113,6 +113,7 @@ prepare_nvml_prefix() {
 
     local nvml_prefix
     if ! nvml_prefix="$(mktemp -d)"; then
+        echo "Unable to create temporary NVML staging directory" >&2
         return 1
     fi
     if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib/stubs" "${nvml_prefix}/lib64/stubs"; then
