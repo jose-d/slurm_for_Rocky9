@@ -11,10 +11,10 @@
           "install_path": "/opt/pmix/3.2.5"
         },
         {
-          "version": "5.0.10",
+          "version": "6.1.0",
           "pmix_srcrpm_release": "1",
           "package_name": "pmix",
-          "install_path": "/opt/pmix/5.0.10"
+          "install_path": "/opt/pmix/6.1.0"
         }
       ],
       "slurm_version": "25.11.5",
@@ -36,10 +36,10 @@
           "install_path": "/opt/pmix/3.2.5"
         },
         {
-          "version": "5.0.10",
+          "version": "6.1.0",
           "pmix_srcrpm_release": "1",
           "package_name": "pmix",
-          "install_path": "/opt/pmix/5.0.10"
+          "install_path": "/opt/pmix/6.1.0"
         }
       ],
       "slurm_version": "25.11.5",
