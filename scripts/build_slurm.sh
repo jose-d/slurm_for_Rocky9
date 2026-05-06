@@ -12,6 +12,19 @@ echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 # enable shell debug
 set -x
 
+if [ -d "${GITHUB_WORKSPACE}/munge_rpms" ]; then
+    # install munge from locally built RPMs
+    cat > /etc/yum.repos.d/munge-local.repo << EOF
+[munge-local]
+name=Local Munge RPMs
+baseurl=file://${GITHUB_WORKSPACE}/munge_rpms
+enabled=1
+gpgcheck=0
+EOF
+
+    dnf -y install --allowerasing munge munge-devel
+fi
+
 if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
     # install deps
     cat > /etc/yum.repos.d/pmix-local.repo << EOF
