@@ -16,6 +16,7 @@ jobs:
       reltag: ${{ steps.generate.outputs.reltag }}
       matrix: ${{ steps.generate.outputs.matrix }}
       pmix_matrix: ${{ steps.generate.outputs.pmix_matrix }}
+      munge_matrix: ${{ steps.generate.outputs.munge_matrix }}
       release_body: ${{ steps.generate.outputs.release_body }}
 
     steps:
@@ -77,6 +78,23 @@ jobs:
               separators=(",", ":"),
           )
 
+          munge_matrix_entries = []
+          for build in builds:
+              munge_version = build["munge_version"]
+              munge_matrix_entries.append(
+                  {
+                      "distro": build["distro"],
+                      "munge_version": munge_version,
+                      "munge_builder_image": build["slurm_builder_image"],
+                      "script_dir": build["script_dir"],
+                      "munge_artifact_suffix": f"{build['distro']}-munge-{munge_version}",
+                  }
+              )
+          munge_matrix = json.dumps(
+              {"include": munge_matrix_entries},
+              separators=(",", ":"),
+          )
+
           lines = ["RPMs containing builds of:"]
           for build in builds:
               detail = (
@@ -92,6 +110,7 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"matrix={matrix}\n")
               output.write(f"pmix_matrix={pmix_matrix}\n")
+              output.write(f"munge_matrix={munge_matrix}\n")
               output.write("release_body<<EOF\n")
               output.write("\n".join(lines) + "\n")
               output.write("EOF\n")
@@ -179,12 +198,89 @@ jobs:
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/*.rpm
 
+  build_munge:
+    name: Build Munge ${{ matrix.distro }} ${{ matrix.munge_version }}
+    runs-on: ubuntu-latest
+    needs: prolog
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prolog.outputs.munge_matrix) }}
+    env:
+      GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
+      GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+      DISTRO: ${{ matrix.distro }}
+      MUNGE_VERSION: ${{ matrix.munge_version }}
+      MUNGE_BUILDER_IMAGE: ${{ matrix.munge_builder_image }}
+      BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
+      MUNGE_ARTIFACT_SUFFIX: ${{ matrix.munge_artifact_suffix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Cache Munge tarball
+        uses: actions/cache@v5
+        with:
+          path: munge-${{ env.MUNGE_VERSION }}.tar.xz
+          key: ${{ runner.os }}-${{ matrix.distro }}-munge-${{ env.MUNGE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.distro }}-munge-
+
+      - name: Download Munge tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL="munge-${MUNGE_VERSION}.tar.xz"
+          if [ ! -f "${TARBALL}" ]; then
+            wget --quiet "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}"
+          fi
+
+      - name: Login to ghcr registry with docker and build Munge
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          docker run \
+                     --env MUNGE_RELTAG="${RELTAG}" \
+                     --env MUNGE_VERSION="${MUNGE_VERSION}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${MUNGE_BUILDER_IMAGE}" \
+                     /bin/bash "${BUILD_SCRIPT_DIR}/build_munge.sh" 2>&1 | tee "munge_build_${DISTRO}.log"
+
+      - name: Upload Munge build log as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/munge_build_${{ matrix.distro }}.log
+
+      - name: Upload Munge rpm list as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-image_munge_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_munge_rpms.txt
+
+      - name: Upload Munge rpms as artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
   build_slurm:
     name: Build ${{ matrix.distro }}
     runs-on: ubuntu-latest
     needs:
       - prolog
       - build_pmix
+      - build_munge
     permissions:
       contents: read
       packages: read
@@ -249,6 +345,46 @@ jobs:
             -v "${PMIX_RPMS_DIR}:${PMIX_RPMS_DIR}" \
             rockylinux:9 \
             bash -c "dnf install -y createrepo_c && createrepo_c ${PMIX_RPMS_DIR}"
+
+      - name: Download Munge rpms for current distro
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ matrix.distro }}-munge-*-rpms
+          path: ${{ github.workspace }}/munge_rpms
+          merge-multiple: true
+
+      - name: Flatten downloaded Munge rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/munge_rpms"
+          mapfile -t munge_rpms < <(find "${GITHUB_WORKSPACE}/munge_rpms" -type f -name '*.rpm')
+          if [ "${#munge_rpms[@]}" -eq 0 ]; then
+            echo "No Munge RPMs were downloaded" >&2
+            exit 1
+          fi
+          for rpm in "${munge_rpms[@]}"; do
+            dest="${GITHUB_WORKSPACE}/munge_rpms/$(basename "${rpm}")"
+            if [ "${rpm}" != "${dest}" ]; then
+              mv "${rpm}" "${dest}"
+            fi
+          done
+
+      - name: Print downloaded Munge rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          find "${GITHUB_WORKSPACE}/munge_rpms" -maxdepth 1 -type f -name '*.rpm' -print | sort
+
+      - name: Create Munge RPM repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          MUNGE_RPMS_DIR="${GITHUB_WORKSPACE}/munge_rpms"
+          docker run --rm \
+            -v "${MUNGE_RPMS_DIR}:${MUNGE_RPMS_DIR}" \
+            rockylinux:9 \
+            bash -c "dnf install -y createrepo_c && createrepo_c ${MUNGE_RPMS_DIR}"
 
       - name: Cache Slurm tarball
         uses: actions/cache@v5
@@ -318,6 +454,7 @@ jobs:
     needs:
       - prolog
       - build_pmix
+      - build_munge
       - build_slurm
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
@@ -328,6 +465,13 @@ jobs:
         with:
           pattern: "*-pmix-*-rpms"
           path: rpms/pmix
+          merge-multiple: true
+
+      - name: Download Munge rpms
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*-munge-*-rpms"
+          path: rpms/munge
           merge-multiple: true
 
       - name: Download Slurm rpms
@@ -341,6 +485,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: "*-pmix-*-build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Download Munge build logs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*-munge-*-build.log"
           path: logs
           merge-multiple: true
 
