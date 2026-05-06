@@ -80,17 +80,16 @@ jobs:
 
           munge_matrix_entries = []
           for build in builds:
-              munge_version = build.get("munge_version")
-              if munge_version:
-                  munge_matrix_entries.append(
-                      {
-                          "distro": build["distro"],
-                          "munge_version": munge_version,
-                          "munge_builder_image": build["slurm_builder_image"],
-                          "script_dir": build["script_dir"],
-                          "munge_artifact_suffix": f"{build['distro']}-munge-{munge_version}",
-                      }
-                  )
+              munge_version = build["munge_version"]
+              munge_matrix_entries.append(
+                  {
+                      "distro": build["distro"],
+                      "munge_version": munge_version,
+                      "munge_builder_image": build["slurm_builder_image"],
+                      "script_dir": build["script_dir"],
+                      "munge_artifact_suffix": f"{build['distro']}-munge-{munge_version}",
+                  }
+              )
           munge_matrix = json.dumps(
               {"include": munge_matrix_entries},
               separators=(",", ":"),

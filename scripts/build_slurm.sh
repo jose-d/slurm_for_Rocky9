@@ -22,7 +22,7 @@ enabled=1
 gpgcheck=0
 EOF
 
-    dnf -y install --allowerasing munge munge-devel
+    dnf -y install --disablerepo='*' --enablerepo=munge-local --allowerasing munge munge-devel
 fi
 
 if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
