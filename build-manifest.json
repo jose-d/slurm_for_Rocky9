@@ -17,7 +17,7 @@
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
-      "slurm_version": "25.11.5",
+      "slurm_version": "26.05.3",
       "munge_version": "0.5.18",
       "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build:latest",
       "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build:latest",
@@ -43,7 +43,7 @@
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
-      "slurm_version": "25.11.5",
+      "slurm_version": "26.05.3",
       "munge_version": "0.5.18",
       "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build:latest",
       "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build:latest",
