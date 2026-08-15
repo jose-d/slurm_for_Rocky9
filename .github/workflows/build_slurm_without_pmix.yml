@@ -50,9 +50,9 @@ jobs:
       GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: el8-no-pmix
-      MUNGE_VERSION: ${{ env.MUNGE_VERSION }}
+      MUNGE_VERSION: 0.5.18
       MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build:latest
-      MUNGE_ARTIFACT_SUFFIX: el8-no-pmix-munge-${{ env.MUNGE_VERSION }}
+      MUNGE_ARTIFACT_SUFFIX: el8-no-pmix-munge-0.5.18
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
