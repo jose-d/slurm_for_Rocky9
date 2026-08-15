@@ -11,6 +11,7 @@ env:
   SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build:latest
   SLURM_NVML_PATH: /usr/local/cuda/targets/x86_64-linux/
   SLURM_WITH_RPATH: "true"
+  MUNGE_VERSION: 0.5.18
 
 jobs:
   prolog:
@@ -33,14 +34,87 @@ jobs:
             echo "reltag=${RELTAG}"
             echo "release_body<<EOF"
             echo "RPMs containing builds of:"
-            echo "* Rocky8/EL8 compatible [Slurm ${SLURM_VERSION}](https://slurm.schedmd.com/) without PMIx, with NVML/CUDA support"
+            echo "* Rocky8/EL8 compatible [Slurm ${SLURM_VERSION}](https://slurm.schedmd.com/) without PMIx, with NVML/CUDA support, Munge ${MUNGE_VERSION}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+  build_munge:
+    name: Build Munge 0.5.18
+    runs-on: ubuntu-latest
+    needs: prolog
+    permissions:
+      contents: read
+      packages: read
+    env:
+      GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
+      GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+      DISTRO: el8-no-pmix
+      MUNGE_VERSION: ${{ env.MUNGE_VERSION }}
+      MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build:latest
+      MUNGE_ARTIFACT_SUFFIX: el8-no-pmix-munge-${{ env.MUNGE_VERSION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Cache Munge tarball
+        uses: actions/cache@v5
+        with:
+          path: munge-${{ env.MUNGE_VERSION }}.tar.xz
+          key: ${{ runner.os }}-${{ env.DISTRO }}-munge-${{ env.MUNGE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-${{ env.DISTRO }}-munge-
+
+      - name: Download Munge tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL="munge-${MUNGE_VERSION}.tar.xz"
+          if [ ! -f "${TARBALL}" ]; then
+            wget --quiet "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}"
+          fi
+
+      - name: Login to ghcr registry with docker and build Munge
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          docker run \
+                     --env MUNGE_RELTAG="${RELTAG}" \
+                     --env MUNGE_VERSION="${MUNGE_VERSION}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${MUNGE_BUILDER_IMAGE}" \
+                     /bin/bash scripts/build_munge.sh 2>&1 | tee "munge_build_${DISTRO}.log"
+
+      - name: Upload Munge build log as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/munge_build_${{ env.DISTRO }}.log
+
+      - name: Upload Munge rpm list as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-image_munge_rpms.txt
+          if-no-files-found: error
+          path: ${{ github.workspace }}/image_munge_rpms.txt
+
+      - name: Upload Munge rpms as artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
 
   build_slurm:
     name: Build Rocky8 Slurm without PMIx
     runs-on: ubuntu-latest
-    needs: prolog
+    needs:
+      - prolog
+      - build_munge
     permissions:
       contents: read
       packages: read
@@ -52,6 +126,46 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Download Munge rpms
+        uses: actions/download-artifact@v8
+        with:
+          pattern: el8-no-pmix-munge-*-rpms
+          path: ${{ github.workspace }}/munge_rpms
+          merge-multiple: true
+
+      - name: Flatten downloaded Munge rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/munge_rpms"
+          mapfile -t munge_rpms < <(find "${GITHUB_WORKSPACE}/munge_rpms" -type f -name '*.rpm')
+          if [ "${#munge_rpms[@]}" -eq 0 ]; then
+            echo "No Munge RPMs were downloaded" >&2
+            exit 1
+          fi
+          for rpm in "${munge_rpms[@]}"; do
+            dest="${GITHUB_WORKSPACE}/munge_rpms/$(basename "${rpm}")"
+            if [ "${rpm}" != "${dest}" ]; then
+              mv "${rpm}" "${dest}"
+            fi
+          done
+
+      - name: Print downloaded Munge rpms
+        shell: bash
+        run: |
+          set -euo pipefail
+          find "${GITHUB_WORKSPACE}/munge_rpms" -maxdepth 1 -type f -name '*.rpm' -print | sort
+
+      - name: Create Munge RPM repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          MUNGE_RPMS_DIR="${GITHUB_WORKSPACE}/munge_rpms"
+          docker run --rm \
+            -v "${MUNGE_RPMS_DIR}:${MUNGE_RPMS_DIR}" \
+            rockylinux:9 \
+            bash -c "dnf install -y createrepo_c && createrepo_c ${MUNGE_RPMS_DIR}"
 
       - name: Cache Slurm tarball
         uses: actions/cache@v5
@@ -118,6 +232,7 @@ jobs:
       contents: write
     needs:
       - prolog
+      - build_munge
       - build_slurm
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
@@ -130,10 +245,24 @@ jobs:
           path: rpms/slurm
           merge-multiple: true
 
+      - name: Download Munge rpms
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*-munge-*-rpms"
+          path: rpms/munge
+          merge-multiple: true
+
       - name: Download Slurm build logs
         uses: actions/download-artifact@v8
         with:
           pattern: "*-slurm_build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Download Munge build logs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*-munge-*-build.log"
           path: logs
           merge-multiple: true
 

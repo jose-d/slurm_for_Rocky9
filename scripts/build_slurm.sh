@@ -23,9 +23,6 @@ gpgcheck=0
 EOF
 
     dnf -y install --disablerepo='*' --enablerepo=munge-local --allowerasing munge munge-devel
-else
-    # install munge from standard repos (used by no-PMIx builds)
-    dnf -y install munge munge-devel
 fi
 
 if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
