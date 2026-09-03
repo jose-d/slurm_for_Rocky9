@@ -25,6 +25,7 @@
       "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
       "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build@sha256:a6def561bc0f46eb83d53ce1d3415f449bcea2aaa281611cae4472cb441a1aa1",
       "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90",
+      "runtime_image": "docker.io/library/rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c",
       "nvml_version": "13-0",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_with_ucx": true,
@@ -55,6 +56,7 @@
       "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
       "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build@sha256:f25b739370687b52697882ae2a247efb00d714ac339431f6bff12bcc1f9beaf6",
       "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build@sha256:06ed38ae44103705c1b74ec15566d2bc83ffe37fbf5a93cf8f6421f11b6395f9",
+      "runtime_image": "docker.io/library/rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_ucx_path": false,
       "slurm_with_rpath": true

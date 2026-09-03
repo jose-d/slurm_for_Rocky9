@@ -100,6 +100,15 @@ def main():
                 ),
             }
         )
+        images.append(
+            {
+                "distro": distro,
+                "purpose": "smoke-test-runtime",
+                "reference": require_digest_reference(
+                    build["runtime_image"], f"{distro} smoke-test runtime"
+                ),
+            }
+        )
 
         if args.exclude_pmix:
             build["pmix_builds"] = []

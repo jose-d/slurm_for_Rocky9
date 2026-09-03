@@ -472,6 +472,67 @@ jobs:
           if-no-files-found: error
           path: cuda_version_${{ matrix.distro }}.txt
 
+  smoke_test:
+    name: Smoke test ${{ matrix.distro }} RPMs
+    runs-on: ubuntu-latest
+    needs:
+      - prolog
+      - build_slurm
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prolog.outputs.matrix) }}
+    env:
+      DISTRO: ${{ matrix.distro }}
+      SLURM_VERSION: ${{ matrix.slurm_version }}
+      RUNTIME_IMAGE: ${{ matrix.runtime_image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download PMIx RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ matrix.distro }}-pmix-*-rpms
+          path: smoke_rpms/pmix
+          merge-multiple: true
+
+      - name: Download Munge RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ matrix.distro }}-munge-*-rpms
+          path: smoke_rpms/munge
+          merge-multiple: true
+
+      - name: Download Slurm RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ matrix.distro }}-slurm_rpms
+          path: smoke_rpms/slurm
+          merge-multiple: true
+
+      - name: Install and smoke test RPMs in a fresh container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+            "${RUNTIME_IMAGE}" \
+            /bin/bash /workspace/scripts/smoke_test_rpms.sh \
+            /workspace/smoke_rpms \
+            "${SLURM_VERSION}" \
+            true 2>&1 | tee "smoke_test_${DISTRO}.log"
+
+      - name: Upload smoke-test log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ matrix.distro }}-smoke-test.log
+          if-no-files-found: warn
+          path: smoke_test_${{ matrix.distro }}.log
+
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
@@ -483,6 +544,7 @@ jobs:
       - build_pmix
       - build_munge
       - build_slurm
+      - smoke_test
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
@@ -533,6 +595,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-slurm_build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Download smoke-test logs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: "*-smoke-test.log"
           path: logs
           merge-multiple: true
 
