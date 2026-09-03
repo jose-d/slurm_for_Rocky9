@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# fail if anything wrong
-set -e
+set -euo pipefail
 
 MUNGE_VERSION="${MUNGE_VERSION:?MUNGE_VERSION must be set}"
 MUNGE_RELTAG="${MUNGE_RELTAG:?MUNGE_RELTAG must be set}"
+GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 
 # print input vars
 echo "MUNGE_RELTAG: ${MUNGE_RELTAG}, MUNGE_VERSION: ${MUNGE_VERSION}"

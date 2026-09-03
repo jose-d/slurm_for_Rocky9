@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-set -u
+set -euo pipefail
 
 normalize_version() {
-    sed -nE 's/[^0-9]*([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/p' | head -n 1
+    sed -nE '/[0-9]+\.[0-9]+/ { s/[^0-9]*([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/; p; q; }'
 }
 
 if [ -n "${CUDA_VERSION:-}" ]; then
@@ -15,15 +15,14 @@ if [ -n "${CUDA_VERSION:-}" ]; then
 fi
 
 if command -v nvcc >/dev/null 2>&1; then
-    version="$(nvcc --version 2>/dev/null | normalize_version)"
-    if [ -n "${version}" ]; then
+    if version="$(nvcc --version 2>/dev/null | normalize_version)" && [ -n "${version}" ]; then
         printf '%s\n' "${version}"
         exit 0
     fi
 fi
 
 if [ -f /usr/local/cuda/version.json ] && command -v python3 >/dev/null 2>&1; then
-    version="$(python3 - <<'PY' 2>/dev/null
+    if version="$(python3 - <<'PY' 2>/dev/null
 import json
 from pathlib import Path
 
@@ -34,8 +33,11 @@ if isinstance(cuda, dict):
 if cuda:
     print(cuda)
 PY
-)"
-    version="$(printf '%s\n' "${version}" | normalize_version)"
+)"; then
+        version="$(printf '%s\n' "${version}" | normalize_version)"
+    else
+        version=""
+    fi
     if [ -n "${version}" ]; then
         printf '%s\n' "${version}"
         exit 0
