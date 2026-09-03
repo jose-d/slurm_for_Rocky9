@@ -24,6 +24,20 @@ if [ "${expect_pmix}" != "true" ] && [ "${expect_pmix}" != "false" ]; then
     exit 2
 fi
 
+# Slurm's JWT support has a runtime dependency from EPEL.  The minimal Rocky
+# images also omit findutils, which this validation script uses to discover the
+# downloaded RPMs and installed plugins.
+dnf install -y epel-release findutils
+
+rhel_major="$(rpm -E '%{rhel}')"
+if [ "${expect_pmix}" = "true" ] && [ "${rhel_major}" = "8" ]; then
+    # The EL8 builders get hwloc-devel from PowerTools and UCX 1.20 from the
+    # same versioned NVIDIA DOCA repository used to build Slurm.
+    dnf config-manager --set-enabled powertools
+    dnf config-manager --add-repo \
+        https://linux.mellanox.com/public/repo/doca/3.3.0/rhel8/x86_64/
+fi
+
 mapfile -d '' -t all_rpms < <(find "${rpm_dir}" -type f -name '*.rpm' -print0)
 if [ "${#all_rpms[@]}" -eq 0 ]; then
     echo "No RPMs found under ${rpm_dir}" >&2
@@ -64,9 +78,16 @@ printf 'Installing smoke-test RPMs:\n'
 printf '  %s\n' "${install_rpms[@]}"
 dnf install -y --nogpgcheck "${install_rpms[@]}"
 
+# Without a local configuration, srun enters configless discovery before it
+# processes --version/--mpi=list.  A minimal valid configuration keeps these
+# smoke checks self-contained and does not require a running controller.
+smoke_slurm_conf="$(mktemp)"
+trap 'rm -f "${smoke_slurm_conf}"' EXIT
+printf 'ClusterName=smoke-test\nSlurmctldHost=localhost\n' > "${smoke_slurm_conf}"
+
 expected_output="slurm ${expected_slurm_version}"
 for binary in slurmctld srun; do
-    actual_output="$("${binary}" --version)"
+    actual_output="$(SLURM_CONF="${smoke_slurm_conf}" "${binary}" --version)"
     printf '%s --version: %s\n' "${binary}" "${actual_output}"
     if [ "${actual_output}" != "${expected_output}" ]; then
         echo "Unexpected ${binary} version; expected ${expected_output}" >&2
@@ -100,13 +121,12 @@ for plugin in "${pmix_plugins[@]}"; do
         echo "Unresolved runtime dependency in ${plugin}" >&2
         exit 1
     fi
-    if ! grep -Eq 'libpmix\.so' <<< "${linkage}"; then
-        echo "PMIx library linkage not found in ${plugin}" >&2
-        exit 1
-    fi
 done
 
-mpi_list="$(srun --mpi=list 2>&1)"
+# Slurm's PMIx plugins intentionally leave PMIx API symbols for the plugin
+# loader to resolve, so they do not have a direct libpmix.so DT_NEEDED entry.
+# Successful plugin discovery by srun is the functional linkage check.
+mpi_list="$(SLURM_CONF="${smoke_slurm_conf}" srun --mpi=list 2>&1)"
 printf '%s\n' "${mpi_list}"
 if ! grep -qi 'pmix' <<< "${mpi_list}"; then
     echo "srun did not report PMIx support" >&2
