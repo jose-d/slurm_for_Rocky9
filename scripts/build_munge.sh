@@ -5,6 +5,7 @@ set -euo pipefail
 MUNGE_VERSION="${MUNGE_VERSION:?MUNGE_VERSION must be set}"
 MUNGE_RELTAG="${MUNGE_RELTAG:?MUNGE_RELTAG must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
+DISTRO="${DISTRO:?DISTRO must be set}"
 
 # print input vars
 echo "MUNGE_RELTAG: ${MUNGE_RELTAG}, MUNGE_VERSION: ${MUNGE_VERSION}"
@@ -42,11 +43,14 @@ sed -i "s/^Release:.*$/Release: ${MUNGE_RELTAG}%{?dist}/" "${MUNGE_SPEC_PATH}"
 grep -Fq "${MUNGE_RELTAG}" "${MUNGE_SPEC_PATH}" \
     || { echo "Spec patch failed: reltag not found in Release line" >&2; exit 1; }
 
-# dump rpmlist for possible forensic
-rpm -qa | sort > "${GITHUB_WORKSPACE}/image_munge_rpms.txt"
+# dump rpmlist for build provenance
+rpm -qa | sort > "${GITHUB_WORKSPACE}/image_munge_rpms_${DISTRO}.txt"
 
 # do rpmbuild
-rpmbuild -ba "${MUNGE_SPEC_PATH}"
+rpmbuild_cmd=(rpmbuild -ba "${MUNGE_SPEC_PATH}")
+printf '%q ' "${rpmbuild_cmd[@]}" > "${GITHUB_WORKSPACE}/rpmbuild_munge_${DISTRO}.txt"
+printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_munge_${DISTRO}.txt"
+"${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 mapfile -t munge_rpms < <(find "${HOME}/rpmbuild/RPMS/x86_64" -name 'munge*.rpm')

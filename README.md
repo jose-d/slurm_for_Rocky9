@@ -23,6 +23,10 @@ sudo dnf makecache
 
 The generated repository configuration currently has `gpgcheck=0` because these RPMs are not signed. GitHub Releases retain the versioned build archives; the HTTP repository is replaced by the latest successful build.
 
+## Build provenance
+
+Every release includes a `build-provenance.json` file (or `build-provenance-no-pmix.json`) and the same file is retained as a workflow artifact. It records the repository commit and workflow run, source URLs and SHA-256 checksums, builder image digests, exact shell-escaped `rpmbuild` commands, and the installed package list from every builder image.
+
 ## Acknowledgments
 
 I was inspired by the work done by the [c3se](https://github.com/c3se) team, as showcased in their [repository](https://github.com/c3se/containers/tree/master/rpm-builds). Additionally, I greatly benefited from the advice shared by the community on the EasyBuild Slack and from the [insightful talk](https://github.com/easybuilders/easybuild/wiki/EasyBuild-tech-talks-I:-Open-MPI) organized by EasyBuild, which can be found on their [Tech Talks](https://easybuild.io/tech-talks/) page.
