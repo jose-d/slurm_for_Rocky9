@@ -154,6 +154,7 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --env DISTRO="${DISTRO}" \
                      --env PMIX_RELTAG="${RELTAG}" \
                      --env PMIX_VERSION="${PMIX_VERSION}" \
                      --env PMIX_SRCRPM_RELEASE="${PMIX_SRCRPM_RELEASE}" \
@@ -177,7 +178,9 @@ jobs:
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-image_pmix_rpms.txt
           if-no-files-found: error
-          path: ${{ github.workspace }}/image_pmix_rpms.txt
+          path: |
+            ${{ github.workspace }}/image_pmix_rpms_${{ matrix.distro }}_${{ matrix.pmix_version }}.txt
+            ${{ github.workspace }}/rpmbuild_pmix_${{ matrix.distro }}_${{ matrix.pmix_version }}.txt
 
       - name: Upload PMIx rpms as artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -235,6 +238,7 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --env DISTRO="${DISTRO}" \
                      --env MUNGE_RELTAG="${RELTAG}" \
                      --env MUNGE_VERSION="${MUNGE_VERSION}" \
                      --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
@@ -255,7 +259,9 @@ jobs:
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-image_munge_rpms.txt
           if-no-files-found: error
-          path: ${{ github.workspace }}/image_munge_rpms.txt
+          path: |
+            ${{ github.workspace }}/image_munge_rpms_${{ matrix.distro }}.txt
+            ${{ github.workspace }}/rpmbuild_munge_${{ matrix.distro }}.txt
 
       - name: Upload Munge rpms as artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -403,6 +409,7 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --env DISTRO="${DISTRO}" \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
                      --env SLURM_SPEC_PATH="${SLURM_SPEC_PATH}" \
@@ -429,7 +436,9 @@ jobs:
         with:
           name: ${{ matrix.distro }}-image_slurm_rpms.txt
           if-no-files-found: error
-          path: ${{ github.workspace }}/image_slurm_rpms.txt
+          path: |
+            ${{ github.workspace }}/image_slurm_rpms_${{ matrix.distro }}.txt
+            ${{ github.workspace }}/rpmbuild_slurm_${{ matrix.distro }}.txt
 
       - name: Upload Slurm rpms as artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -534,6 +543,13 @@ jobs:
           path: cuda_versions
           merge-multiple: true
 
+      - name: Download build provenance fragments
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: "*-image_*_rpms.txt"
+          path: provenance/fragments
+          merge-multiple: true
+
       - name: Create distro tarballs from rpms
         shell: bash
         run: |
@@ -629,6 +645,29 @@ jobs:
               output.write("EOF\n")
           PY
 
+      - name: Create consolidated build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/create_build_provenance.py \
+            --manifest build-manifest.json \
+            --fragments provenance/fragments \
+            --output provenance/build-provenance.json \
+            --commit-sha "${GITHUB_SHA}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --workflow "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --server-url "${GITHUB_SERVER_URL}" \
+            --helper-image "rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+
+      - name: Upload consolidated build provenance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-provenance-${{ env.RELTAG }}
+          if-no-files-found: error
+          path: provenance/build-provenance.json
+
       - name: Create tag
         id: tag_version
         uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
@@ -645,6 +684,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             logs/*
+            provenance/build-provenance.json
             rpm_tarball_*.tar.gz
 
   deploy_rpm_repository:

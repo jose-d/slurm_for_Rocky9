@@ -6,6 +6,7 @@ PMIX_RELTAG="${PMIX_RELTAG:?PMIX_RELTAG must be set}"
 PMIX_VERSION="${PMIX_VERSION:?PMIX_VERSION must be set}"
 PMIX_SRCRPM_RELEASE="${PMIX_SRCRPM_RELEASE:?PMIX_SRCRPM_RELEASE must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
+DISTRO="${DISTRO:?DISTRO must be set}"
 
 # print input vars
 echo "PMIX_RELTAG: ${PMIX_RELTAG}, PMIX_VERSION: ${PMIX_VERSION}, PMIX_SRCRPM_RELEASE: ${PMIX_SRCRPM_RELEASE}, PMIX_PACKAGE_NAME: ${PMIX_PACKAGE_NAME:-pmix}"
@@ -89,8 +90,8 @@ if grep -Fq '/opt/%{name}' "${PMIX_SPEC_PATH}"; then
     exit 1
 fi
 
-# dump rpmlist for possible forensic
-rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms.txt"
+# dump rpmlist for build provenance
+rpm -qa | sort > "${GITHUB_WORKSPACE}/image_pmix_rpms_${DISTRO}_${PMIX_VERSION}.txt"
 
 # do rpmbuild
 rpmbuild_cmd=(rpmbuild)
@@ -99,14 +100,19 @@ if [ -n "${PMIX_PACKAGE_NAME:-}" ] && [ "${PMIX_PACKAGE_NAME}" != "pmix" ]; then
     rpmbuild_cmd+=(--define "_name ${PMIX_PACKAGE_NAME}")
 fi
 
-"${rpmbuild_cmd[@]}" \
-         --define 'build_all_in_one_rpm 0' \
-         --define 'install_in_opt 1' \
-         --define 'install_modulefile 1' \
-         --define "reltag ${PMIX_RELTAG}" \
-         --define "opt_prefix_base ${PMIX_OPT_PREFIX_BASE:-/opt/pmix}" \
-         --define "configure_options ${PMIX_CONFIGURE_OPTIONS:---with-tests-examples --disable-per-user-config-files --with-munge=no --enable-pmix-binaries }" \
-         -ba "${PMIX_SPEC_PATH}"
+rpmbuild_cmd+=(
+    --define 'build_all_in_one_rpm 0'
+    --define 'install_in_opt 1'
+    --define 'install_modulefile 1'
+    --define "reltag ${PMIX_RELTAG}"
+    --define "opt_prefix_base ${PMIX_OPT_PREFIX_BASE:-/opt/pmix}"
+    --define "configure_options ${PMIX_CONFIGURE_OPTIONS:---with-tests-examples --disable-per-user-config-files --with-munge=no --enable-pmix-binaries }"
+    -ba "${PMIX_SPEC_PATH}"
+)
+
+printf '%q ' "${rpmbuild_cmd[@]}" > "${GITHUB_WORKSPACE}/rpmbuild_pmix_${DISTRO}_${PMIX_VERSION}.txt"
+printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_pmix_${DISTRO}_${PMIX_VERSION}.txt"
+"${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/*.rpm ${GITHUB_WORKSPACE}/rpms/

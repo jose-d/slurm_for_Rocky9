@@ -5,6 +5,7 @@ set -euo pipefail
 SLURM_RELTAG="${SLURM_RELTAG:?SLURM_RELTAG must be set}"
 SLURM_VERSION="${SLURM_VERSION:?SLURM_VERSION must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
+DISTRO="${DISTRO:?DISTRO must be set}"
 
 # print input vars
 echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
@@ -42,8 +43,8 @@ fi
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
 cp "${GITHUB_WORKSPACE}/slurm-${SLURM_VERSION}.tar.bz2" "$HOME/rpmbuild/SOURCES/"
 
-# dump rpmlist for possible forensic
-rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms.txt"
+# dump rpmlist for build provenance
+rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms_${DISTRO}.txt"
 
 SLURM_SPEC_PATH="${SLURM_SPEC_PATH:?SLURM_SPEC_PATH must be set}"
 
@@ -200,9 +201,10 @@ if [ "${#pmix_args[@]}" -gt 0 ]; then
     rpmbuild_args+=("${pmix_args[@]}")
 fi
 
-"${rpmbuild_cmd[@]}" \
-        "${rpmbuild_args[@]}" \
-        -ba "${SLURM_SPEC_PATH}"
+rpmbuild_cmd+=("${rpmbuild_args[@]}" -ba "${SLURM_SPEC_PATH}")
+printf '%q ' "${rpmbuild_cmd[@]}" > "${GITHUB_WORKSPACE}/rpmbuild_slurm_${DISTRO}.txt"
+printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_slurm_${DISTRO}.txt"
+"${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 cp ${HOME}/rpmbuild/RPMS/x86_64/slurm-*.rpm "${GITHUB_WORKSPACE}/rpms/"
