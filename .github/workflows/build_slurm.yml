@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Generate matrices from manifest
         id: generate
@@ -64,6 +64,7 @@ jobs:
                           "distro": build["distro"],
                           "pmix_version": item["version"],
                           "pmix_srcrpm_release": item.get("pmix_srcrpm_release", "1"),
+                          "pmix_sha256": item["sha256"],
                           "pmix_package_name": item.get("package_name", "pmix"),
                           "pmix_install_path": item["install_path"],
                           "pmix_builder_image": build["pmix_builder_image"],
@@ -84,6 +85,7 @@ jobs:
                   {
                       "distro": build["distro"],
                       "munge_version": munge_version,
+                      "munge_sha256": build["munge_sha256"],
                       "munge_builder_image": build["slurm_builder_image"],
                       "script_dir": build["script_dir"],
                       "munge_artifact_suffix": f"{build['distro']}-munge-{munge_version}",
@@ -117,6 +119,7 @@ jobs:
       DISTRO: ${{ matrix.distro }}
       PMIX_VERSION: ${{ matrix.pmix_version }}
       PMIX_SRCRPM_RELEASE: ${{ matrix.pmix_srcrpm_release }}
+      PMIX_SHA256: ${{ matrix.pmix_sha256 }}
       PMIX_PACKAGE_NAME: ${{ matrix.pmix_package_name }}
       PMIX_INSTALL_PATH: ${{ matrix.pmix_install_path }}
       PMIXIMAGE_URL: ${{ matrix.pmix_builder_image }}
@@ -125,13 +128,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Cache PMIx src.rpm
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: pmix-${{ env.PMIX_VERSION }}-${{ env.PMIX_SRCRPM_RELEASE }}.src.rpm
-          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}-${{ env.PMIX_SRCRPM_RELEASE }}-srcrpm
+          key: ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}-${{ env.PMIX_SRCRPM_RELEASE }}-${{ env.PMIX_SHA256 }}-srcrpm
           restore-keys: |
             ${{ runner.os }}-${{ matrix.distro }}-pmix-${{ env.PMIX_VERSION }}-
 
@@ -140,9 +143,10 @@ jobs:
         run: |
           set -euo pipefail
           SRCRPM="pmix-${PMIX_VERSION}-${PMIX_SRCRPM_RELEASE}.src.rpm"
-          if [ ! -f "${SRCRPM}" ]; then
-            wget --quiet "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/${SRCRPM}"
-          fi
+          scripts/download_verified.sh \
+            "https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/${SRCRPM}" \
+            "${SRCRPM}" \
+            "${PMIX_SHA256}"
 
       - name: Login to ghcr registry with docker and build PMIx
         shell: bash
@@ -162,21 +166,21 @@ jobs:
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_pmix.sh" 2>&1 | tee "pmix_build_${DISTRO}_${PMIX_VERSION}.log"
 
       - name: Upload PMIx build log as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/pmix_build_${{ matrix.distro }}_${{ matrix.pmix_version }}.log
 
       - name: Upload PMIx rpm list as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-image_pmix_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_pmix_rpms.txt
 
       - name: Upload PMIx rpms as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.PMIX_ARTIFACT_SUFFIX }}-rpms
           if-no-files-found: error
@@ -198,19 +202,20 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
       MUNGE_VERSION: ${{ matrix.munge_version }}
+      MUNGE_SHA256: ${{ matrix.munge_sha256 }}
       MUNGE_BUILDER_IMAGE: ${{ matrix.munge_builder_image }}
       BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
       MUNGE_ARTIFACT_SUFFIX: ${{ matrix.munge_artifact_suffix }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Cache Munge tarball
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: munge-${{ env.MUNGE_VERSION }}.tar.xz
-          key: ${{ runner.os }}-${{ matrix.distro }}-munge-${{ env.MUNGE_VERSION }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-munge-${{ env.MUNGE_VERSION }}-${{ env.MUNGE_SHA256 }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.distro }}-munge-
 
@@ -219,9 +224,10 @@ jobs:
         run: |
           set -euo pipefail
           TARBALL="munge-${MUNGE_VERSION}.tar.xz"
-          if [ ! -f "${TARBALL}" ]; then
-            wget --quiet "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}"
-          fi
+          scripts/download_verified.sh \
+            "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}" \
+            "${TARBALL}" \
+            "${MUNGE_SHA256}"
 
       - name: Login to ghcr registry with docker and build Munge
         shell: bash
@@ -238,21 +244,21 @@ jobs:
                      /bin/bash "${BUILD_SCRIPT_DIR}/build_munge.sh" 2>&1 | tee "munge_build_${DISTRO}.log"
 
       - name: Upload Munge build log as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/munge_build_${{ matrix.distro }}.log
 
       - name: Upload Munge rpm list as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-image_munge_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_munge_rpms.txt
 
       - name: Upload Munge rpms as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-rpms
           if-no-files-found: error
@@ -277,6 +283,7 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: ${{ matrix.distro }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
+      SLURM_SHA256: ${{ matrix.slurm_sha256 }}
       SLURM_SPEC_PATH: ./slurm-${{ matrix.slurm_version }}/slurm.spec
       SLURM_PMIX_PATHS: ${{ matrix.pmix_paths }}
       SLURMIMAGE_URL: ${{ matrix.slurm_builder_image }}
@@ -288,10 +295,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download PMIx rpms for current distro
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: ${{ matrix.distro }}-pmix-*-rpms
           path: ${{ github.workspace }}/pmix_rpms
@@ -327,11 +334,11 @@ jobs:
           PMIX_RPMS_DIR="${GITHUB_WORKSPACE}/pmix_rpms"
           docker run --rm \
             -v "${PMIX_RPMS_DIR}:${PMIX_RPMS_DIR}" \
-            rockylinux:9 \
+            rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
             bash -c "dnf install -y createrepo_c && createrepo_c ${PMIX_RPMS_DIR}"
 
       - name: Download Munge rpms for current distro
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: ${{ matrix.distro }}-munge-*-rpms
           path: ${{ github.workspace }}/munge_rpms
@@ -367,14 +374,14 @@ jobs:
           MUNGE_RPMS_DIR="${GITHUB_WORKSPACE}/munge_rpms"
           docker run --rm \
             -v "${MUNGE_RPMS_DIR}:${MUNGE_RPMS_DIR}" \
-            rockylinux:9 \
+            rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
             bash -c "dnf install -y createrepo_c && createrepo_c ${MUNGE_RPMS_DIR}"
 
       - name: Cache Slurm tarball
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: slurm-${{ env.SLURM_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-${{ matrix.distro }}-slurm-${{ env.SLURM_VERSION }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-slurm-${{ env.SLURM_VERSION }}-${{ env.SLURM_SHA256 }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.distro }}-slurm-
 
@@ -382,9 +389,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f "slurm-${SLURM_VERSION}.tar.bz2" ]; then
-            curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
-          fi
+          scripts/download_verified.sh \
+            "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2" \
+            "slurm-${SLURM_VERSION}.tar.bz2" \
+            "${SLURM_SHA256}"
           tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
           sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" "${SLURM_SPEC_PATH}"
           sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" "${SLURM_SPEC_PATH}"
@@ -410,21 +418,21 @@ jobs:
                       /bin/bash "${BUILD_SCRIPT_DIR}/build_slurm.sh" 2>&1 | tee "slurm_build_${DISTRO}.log"
 
       - name: Upload Slurm build log as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.distro }}-slurm_build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/slurm_build_${{ matrix.distro }}.log
 
       - name: Upload Slurm rpm list as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.distro }}-image_slurm_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_slurm_rpms.txt
 
       - name: Upload Slurm rpms as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.distro }}-slurm_rpms
           if-no-files-found: error
@@ -449,7 +457,7 @@ jobs:
           printf '%s\n' "${cuda_version}" | tee "cuda_version_${DISTRO}.txt"
 
       - name: Upload CUDA version as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.distro }}-cuda_version
           if-no-files-found: error
@@ -471,56 +479,56 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Configure GitHub Pages
         id: pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
       - name: Download PMIx rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-pmix-*-rpms"
           path: rpms/pmix
           merge-multiple: true
 
       - name: Download Munge rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-munge-*-rpms"
           path: rpms/munge
           merge-multiple: true
 
       - name: Download Slurm rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-slurm_rpms"
           path: rpms/slurm
           merge-multiple: true
 
       - name: Download PMIx build logs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-pmix-*-build.log"
           path: logs
           merge-multiple: true
 
       - name: Download Munge build logs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-munge-*-build.log"
           path: logs
           merge-multiple: true
 
       - name: Download Slurm build logs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-slurm_build.log"
           path: logs
           merge-multiple: true
 
       - name: Download CUDA versions
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-cuda_version"
           path: cuda_versions
@@ -572,7 +580,7 @@ jobs:
           scripts/create_rpm_repository.sh rpms rpm-repository "${PAGES_BASE_URL}"
 
       - name: Upload RPM repositories for GitHub Pages
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: rpm-repository
           include-hidden-files: true
@@ -622,13 +630,13 @@ jobs:
 
       - name: Create tag
         id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release and add assets
         id: create_release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           body: ${{ steps.release_body.outputs.body }}
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
@@ -652,4 +660,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

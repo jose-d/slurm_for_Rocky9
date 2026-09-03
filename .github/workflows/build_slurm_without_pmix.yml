@@ -7,11 +7,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   DISTRO: el8-no-pmix
   SLURM_VERSION: 26.05.3
+  SLURM_SHA256: f4219b15b8e4e8dc2559052abfd760759598867cd28051896d3b09c0a06a2ab7
   SLURM_SPEC_PATH: ./slurm-26.05.3/slurm.spec
-  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build:latest
+  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90
   SLURM_NVML_PATH: /usr/local/cuda/targets/x86_64-linux/
   SLURM_WITH_RPATH: "true"
   MUNGE_VERSION: 0.5.18
+  MUNGE_SHA256: 39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc
 
 jobs:
   prolog:
@@ -51,17 +53,17 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: el8-no-pmix
       MUNGE_VERSION: 0.5.18
-      MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build:latest
+      MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90
       MUNGE_ARTIFACT_SUFFIX: el8-no-pmix-munge-0.5.18
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Cache Munge tarball
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: munge-${{ env.MUNGE_VERSION }}.tar.xz
-          key: ${{ runner.os }}-${{ env.DISTRO }}-munge-${{ env.MUNGE_VERSION }}
+          key: ${{ runner.os }}-${{ env.DISTRO }}-munge-${{ env.MUNGE_VERSION }}-${{ env.MUNGE_SHA256 }}
           restore-keys: |
             ${{ runner.os }}-${{ env.DISTRO }}-munge-
 
@@ -70,9 +72,10 @@ jobs:
         run: |
           set -euo pipefail
           TARBALL="munge-${MUNGE_VERSION}.tar.xz"
-          if [ ! -f "${TARBALL}" ]; then
-            wget --quiet "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}"
-          fi
+          scripts/download_verified.sh \
+            "https://github.com/dun/munge/releases/download/munge-${MUNGE_VERSION}/${TARBALL}" \
+            "${TARBALL}" \
+            "${MUNGE_SHA256}"
 
       - name: Login to ghcr registry with docker and build Munge
         shell: bash
@@ -89,21 +92,21 @@ jobs:
                      /bin/bash scripts/build_munge.sh 2>&1 | tee "munge_build_${DISTRO}.log"
 
       - name: Upload Munge build log as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/munge_build_${{ env.DISTRO }}.log
 
       - name: Upload Munge rpm list as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-image_munge_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_munge_rpms.txt
 
       - name: Upload Munge rpms as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.MUNGE_ARTIFACT_SUFFIX }}-rpms
           if-no-files-found: error
@@ -125,10 +128,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download Munge rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: el8-no-pmix-munge-*-rpms
           path: ${{ github.workspace }}/munge_rpms
@@ -164,14 +167,14 @@ jobs:
           MUNGE_RPMS_DIR="${GITHUB_WORKSPACE}/munge_rpms"
           docker run --rm \
             -v "${MUNGE_RPMS_DIR}:${MUNGE_RPMS_DIR}" \
-            rockylinux:9 \
+            rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
             bash -c "dnf install -y createrepo_c && createrepo_c ${MUNGE_RPMS_DIR}"
 
       - name: Cache Slurm tarball
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: slurm-${{ env.SLURM_VERSION }}.tar.bz2
-          key: ${{ runner.os }}-${{ env.DISTRO }}-slurm-${{ env.SLURM_VERSION }}
+          key: ${{ runner.os }}-${{ env.DISTRO }}-slurm-${{ env.SLURM_VERSION }}-${{ env.SLURM_SHA256 }}
           restore-keys: |
             ${{ runner.os }}-${{ env.DISTRO }}-slurm-
 
@@ -179,9 +182,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f "slurm-${SLURM_VERSION}.tar.bz2" ]; then
-            curl -L -o "slurm-${SLURM_VERSION}.tar.bz2" "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
-          fi
+          scripts/download_verified.sh \
+            "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2" \
+            "slurm-${SLURM_VERSION}.tar.bz2" \
+            "${SLURM_SHA256}"
           tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
           sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" "${SLURM_SPEC_PATH}"
           sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" "${SLURM_SPEC_PATH}"
@@ -205,21 +209,21 @@ jobs:
                      /bin/bash scripts/build_slurm.sh 2>&1 | tee "slurm_build_${DISTRO}.log"
 
       - name: Upload Slurm build log as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.DISTRO }}-slurm_build.log
           if-no-files-found: error
           path: ${{ github.workspace }}/slurm_build_${{ env.DISTRO }}.log
 
       - name: Upload Slurm rpm list as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.DISTRO }}-image_slurm_rpms.txt
           if-no-files-found: error
           path: ${{ github.workspace }}/image_slurm_rpms.txt
 
       - name: Upload Slurm rpms as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.DISTRO }}-slurm_rpms
           if-no-files-found: error
@@ -239,28 +243,28 @@ jobs:
 
     steps:
       - name: Download Slurm rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-slurm_rpms"
           path: rpms/slurm
           merge-multiple: true
 
       - name: Download Munge rpms
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-munge-*-rpms"
           path: rpms/munge
           merge-multiple: true
 
       - name: Download Slurm build logs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-slurm_build.log"
           path: logs
           merge-multiple: true
 
       - name: Download Munge build logs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-munge-*-build.log"
           path: logs
@@ -274,7 +278,7 @@ jobs:
 
       - name: Create release and add assets
         id: create_release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           body: ${{ needs.prolog.outputs.release_body }}
           tag_name: no-pmix-${{ env.RELTAG }}

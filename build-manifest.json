@@ -7,20 +7,24 @@
         {
           "version": "3.2.5",
           "pmix_srcrpm_release": "1",
+          "sha256": "4d863f2a1aa9f52d7b3deaf5bd6c663f229907d3101677887f943d54a8498b82",
           "package_name": "pmix3",
           "install_path": "/opt/pmix/3.2.5"
         },
         {
           "version": "6.1.0",
           "pmix_srcrpm_release": "1",
+          "sha256": "f763b64f60b81b549b827cabd6bc555658c36529d0af10f5cecb8cca19781047",
           "package_name": "pmix",
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
       "slurm_version": "26.05.3",
+      "slurm_sha256": "f4219b15b8e4e8dc2559052abfd760759598867cd28051896d3b09c0a06a2ab7",
       "munge_version": "0.5.18",
-      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build:latest",
-      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build:latest",
+      "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
+      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build@sha256:a6def561bc0f46eb83d53ce1d3415f449bcea2aaa281611cae4472cb441a1aa1",
+      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90",
       "nvml_version": "13-0",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_with_ucx": true,
@@ -33,20 +37,24 @@
         {
           "version": "3.2.5",
           "pmix_srcrpm_release": "1",
+          "sha256": "4d863f2a1aa9f52d7b3deaf5bd6c663f229907d3101677887f943d54a8498b82",
           "package_name": "pmix3",
           "install_path": "/opt/pmix/3.2.5"
         },
         {
           "version": "6.1.0",
           "pmix_srcrpm_release": "1",
+          "sha256": "f763b64f60b81b549b827cabd6bc555658c36529d0af10f5cecb8cca19781047",
           "package_name": "pmix",
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
       "slurm_version": "26.05.3",
+      "slurm_sha256": "f4219b15b8e4e8dc2559052abfd760759598867cd28051896d3b09c0a06a2ab7",
       "munge_version": "0.5.18",
-      "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build:latest",
-      "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build:latest",
+      "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
+      "pmix_builder_image": "ghcr.io/jose-d/images/rocky9_pmix-build@sha256:f25b739370687b52697882ae2a247efb00d714ac339431f6bff12bcc1f9beaf6",
+      "slurm_builder_image": "ghcr.io/jose-d/images/rocky9_slurm-build@sha256:06ed38ae44103705c1b74ec15566d2bc83ffe37fbf5a93cf8f6421f11b6395f9",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",
       "slurm_ucx_path": false,
       "slurm_with_rpath": true
