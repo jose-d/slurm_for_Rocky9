@@ -17,13 +17,12 @@ jobs:
       matrix: ${{ steps.generate.outputs.matrix }}
       pmix_matrix: ${{ steps.generate.outputs.pmix_matrix }}
       munge_matrix: ${{ steps.generate.outputs.munge_matrix }}
-      release_body: ${{ steps.generate.outputs.release_body }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Generate matrix and release body from manifest
+      - name: Generate matrices from manifest
         id: generate
         shell: bash
         run: |
@@ -95,25 +94,10 @@ jobs:
               separators=(",", ":"),
           )
 
-          lines = ["RPMs containing builds of:"]
-          for build in builds:
-              detail = (
-                  f"* {build['distro']}: "
-                  f"[Slurm {build['slurm_version']}](https://slurm.schedmd.com/) + "
-                  f"{build['pmix_release_label']}"
-              )
-              nvml_version = build.get("nvml_version")
-              if nvml_version:
-                  detail += f", NVML/CUDA {nvml_version}"
-              lines.append(detail)
-
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"matrix={matrix}\n")
               output.write(f"pmix_matrix={pmix_matrix}\n")
               output.write(f"munge_matrix={munge_matrix}\n")
-              output.write("release_body<<EOF\n")
-              output.write("\n".join(lines) + "\n")
-              output.write("EOF\n")
           PY
 
   build_pmix:
@@ -446,6 +430,31 @@ jobs:
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/slurm-*.rpm
 
+      - name: Detect CUDA version from Slurm builder image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! cuda_version="$(
+            docker run --rm \
+              -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+              "${SLURMIMAGE_URL}" \
+              /bin/bash /workspace/scripts/detect_cuda.sh
+          )"; then
+            cuda_version=unknown
+          fi
+          cuda_version="$(printf '%s\n' "${cuda_version}" | tail -n 1)"
+          if [[ ! "${cuda_version}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            cuda_version=unknown
+          fi
+          printf '%s\n' "${cuda_version}" | tee "cuda_version_${DISTRO}.txt"
+
+      - name: Upload CUDA version as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.distro }}-cuda_version
+          if-no-files-found: error
+          path: cuda_version_${{ matrix.distro }}.txt
+
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
@@ -460,6 +469,9 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
       - name: Download PMIx rpms
         uses: actions/download-artifact@v8
         with:
@@ -502,6 +514,13 @@ jobs:
           path: logs
           merge-multiple: true
 
+      - name: Download CUDA versions
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*-cuda_version"
+          path: cuda_versions
+          merge-multiple: true
+
       - name: Create distro tarballs from rpms
         shell: bash
         run: |
@@ -533,6 +552,49 @@ jobs:
             tar -czf "rpm_tarball_${distro}_${RELTAG}.tar.gz" -C "${distro_stage}" rpms
           done
 
+      - name: Generate release body with detected CUDA versions
+        id: release_body
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          manifest = json.loads(Path("build-manifest.json").read_text())
+          lines = ["RPMs containing builds of:"]
+
+          for build in manifest["builds"]:
+              distro = build["distro"]
+              if not re.fullmatch(r"[A-Za-z0-9_-]+", distro):
+                  raise ValueError(f"Invalid distro name: {distro!r}")
+
+              pmix_label = " + ".join(
+                  f"PMIx {item['version']}" for item in build["pmix_builds"]
+              )
+              detail = (
+                  f"* {distro}: "
+                  f"[Slurm {build['slurm_version']}](https://slurm.schedmd.com/) + "
+                  f"{pmix_label}"
+              )
+
+              version_file = Path(f"cuda_versions/cuda_version_{distro}.txt")
+              cuda_version = version_file.read_text().strip()
+              if re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", cuda_version):
+                  detail += f", CUDA {cuda_version}"
+              elif build.get("nvml_version"):
+                  detail += f", NVML/CUDA {build['nvml_version']}"
+
+              lines.append(detail)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("body<<EOF\n")
+              output.write("\n".join(lines) + "\n")
+              output.write("EOF\n")
+          PY
+
       - name: Create tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
@@ -543,7 +605,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v3
         with:
-          body: ${{ needs.prolog.outputs.release_body }}
+          body: ${{ steps.release_body.outputs.body }}
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: "slurm + pmix builds (${{ env.RELTAG }})"
           fail_on_unmatched_files: true
