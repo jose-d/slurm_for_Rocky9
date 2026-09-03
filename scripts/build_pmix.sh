@@ -115,4 +115,9 @@ printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_pmix_${DISTRO}_${PMIX_VERSION}.txt"
 "${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
-cp ${HOME}/rpmbuild/RPMS/x86_64/*.rpm ${GITHUB_WORKSPACE}/rpms/
+mapfile -d '' -t pmix_rpms < <(find "${HOME}/rpmbuild/RPMS" -type f -name '*.rpm' -print0)
+if [ "${#pmix_rpms[@]}" -eq 0 ]; then
+    echo "No PMIx RPMs found after build" >&2
+    exit 1
+fi
+cp "${pmix_rpms[@]}" "${GITHUB_WORKSPACE}/rpms/"
