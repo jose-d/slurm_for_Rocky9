@@ -207,6 +207,11 @@ printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_slurm_${DISTRO}.txt"
 "${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
-cp ${HOME}/rpmbuild/RPMS/x86_64/slurm-*.rpm "${GITHUB_WORKSPACE}/rpms/"
+mapfile -d '' -t slurm_rpms < <(find "${HOME}/rpmbuild/RPMS" -type f -name 'slurm-*.rpm' -print0)
+if [ "${#slurm_rpms[@]}" -eq 0 ]; then
+    echo "No Slurm RPMs found after build" >&2
+    exit 1
+fi
+cp "${slurm_rpms[@]}" "${GITHUB_WORKSPACE}/rpms/"
 
 set +x

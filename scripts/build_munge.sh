@@ -53,7 +53,7 @@ printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_munge_${DISTRO}.txt"
 "${rpmbuild_cmd[@]}"
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
-mapfile -t munge_rpms < <(find "${HOME}/rpmbuild/RPMS/x86_64" -name 'munge*.rpm')
+mapfile -d '' -t munge_rpms < <(find "${HOME}/rpmbuild/RPMS" -type f -name 'munge*.rpm' -print0)
 if [ "${#munge_rpms[@]}" -eq 0 ]; then
     echo "No Munge RPMs found after build" >&2
     exit 1
