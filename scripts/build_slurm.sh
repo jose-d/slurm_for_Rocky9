@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# fail if anything wrong
-set -e
+set -euo pipefail
 
 SLURM_RELTAG="${SLURM_RELTAG:?SLURM_RELTAG must be set}"
 SLURM_VERSION="${SLURM_VERSION:?SLURM_VERSION must be set}"
+GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 
 # print input vars
 echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"

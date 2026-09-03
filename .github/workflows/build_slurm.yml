@@ -577,6 +577,7 @@ jobs:
         env:
           PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
+          set -euo pipefail
           scripts/create_rpm_repository.sh rpms rpm-repository "${PAGES_BASE_URL}"
 
       - name: Upload RPM repositories for GitHub Pages
