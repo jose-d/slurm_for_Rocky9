@@ -460,6 +460,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: read
     needs:
       - prolog
       - build_pmix
@@ -471,6 +472,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
 
       - name: Download PMIx rpms
         uses: actions/download-artifact@v8
@@ -552,6 +557,26 @@ jobs:
             tar -czf "rpm_tarball_${distro}_${RELTAG}.tar.gz" -C "${distro_stage}" rpms
           done
 
+      - name: Install RPM repository tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y createrepo-c
+
+      - name: Create HTTP RPM repositories
+        shell: bash
+        env:
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          scripts/create_rpm_repository.sh rpms rpm-repository "${PAGES_BASE_URL}"
+
+      - name: Upload RPM repositories for GitHub Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: rpm-repository
+          include-hidden-files: true
+
       - name: Generate release body with detected CUDA versions
         id: release_body
         shell: bash
@@ -612,3 +637,19 @@ jobs:
           files: |
             logs/*
             rpm_tarball_*.tar.gz
+
+  deploy_rpm_repository:
+    name: Deploy HTTP RPM repositories
+    runs-on: ubuntu-latest
+    needs: publish_files
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
