@@ -235,6 +235,53 @@ jobs:
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/slurm-*.rpm
 
+  smoke_test:
+    name: Smoke test Rocky8 Slurm without PMIx
+    runs-on: ubuntu-latest
+    needs: build_slurm
+    permissions:
+      contents: read
+    env:
+      RUNTIME_IMAGE: docker.io/library/rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download Munge RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: el8-no-pmix-munge-*-rpms
+          path: smoke_rpms/munge
+          merge-multiple: true
+
+      - name: Download Slurm RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: el8-no-pmix-slurm_rpms
+          path: smoke_rpms/slurm
+          merge-multiple: true
+
+      - name: Install and smoke test RPMs in a fresh container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+            "${RUNTIME_IMAGE}" \
+            /bin/bash /workspace/scripts/smoke_test_rpms.sh \
+            /workspace/smoke_rpms \
+            "${SLURM_VERSION}" \
+            false 2>&1 | tee "smoke_test_${DISTRO}.log"
+
+      - name: Upload smoke-test log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ env.DISTRO }}-smoke-test.log
+          if-no-files-found: warn
+          path: smoke_test_${{ env.DISTRO }}.log
+
   publish_files:
     name: Publish built files in release
     runs-on: ubuntu-latest
@@ -244,6 +291,7 @@ jobs:
       - prolog
       - build_munge
       - build_slurm
+      - smoke_test
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
 
@@ -276,6 +324,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: "*-munge-*-build.log"
+          path: logs
+          merge-multiple: true
+
+      - name: Download smoke-test logs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: "*-smoke-test.log"
           path: logs
           merge-multiple: true
 
