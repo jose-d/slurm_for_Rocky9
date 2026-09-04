@@ -2,14 +2,15 @@
 
 set -euo pipefail
 
-if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 RPM_DIRECTORY EXPECTED_SLURM_VERSION EXPECT_PMIX" >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo "Usage: $0 RPM_DIRECTORY EXPECTED_SLURM_VERSION EXPECT_PMIX [EXPECT_UCX]" >&2
     exit 2
 fi
 
 rpm_dir="$1"
 expected_slurm_version="$2"
 expect_pmix="$3"
+expect_ucx="${4:-false}"
 
 if [ ! -d "${rpm_dir}" ]; then
     echo "RPM directory does not exist: ${rpm_dir}" >&2
@@ -23,6 +24,10 @@ if [ "${expect_pmix}" != "true" ] && [ "${expect_pmix}" != "false" ]; then
     echo "EXPECT_PMIX must be true or false" >&2
     exit 2
 fi
+if [ "${expect_ucx}" != "true" ] && [ "${expect_ucx}" != "false" ]; then
+    echo "EXPECT_UCX must be true or false" >&2
+    exit 2
+fi
 
 # Slurm's JWT support has a runtime dependency from EPEL.  The minimal Rocky
 # images also omit findutils, which this validation script uses to discover the
@@ -30,7 +35,7 @@ fi
 dnf install -y epel-release findutils
 
 rhel_major="$(rpm -E '%{rhel}')"
-if [ "${expect_pmix}" = "true" ] && [ "${rhel_major}" = "8" ]; then
+if [ "${expect_ucx}" = "true" ] && [ "${rhel_major}" = "8" ]; then
     # The EL8 builders get hwloc-devel from PowerTools and UCX 1.20 from the
     # same versioned NVIDIA DOCA repository used to build Slurm.
     dnf config-manager --set-enabled powertools
@@ -73,6 +78,20 @@ install_rpms=()
 for package_name in "${required_packages[@]}"; do
     install_rpms+=("$(find_package_rpm "${package_name}")")
 done
+
+ucx_requirement_pattern='(^|/)(libuc[mpxts]|ucx)([.([:space:]]|$)'
+slurm_ucx_requirements="$(
+    for rpm_path in "${all_rpms[@]}"; do
+        if [[ "$(rpm -qp --queryformat '%{NAME}' "${rpm_path}")" == slurm* ]]; then
+            rpm -qpR "${rpm_path}"
+        fi
+    done | grep -Ei "${ucx_requirement_pattern}" || true
+)"
+if [ "${expect_ucx}" = "false" ] && [ -n "${slurm_ucx_requirements}" ]; then
+    echo "Unexpected UCX RPM requirements in Slurm packages:" >&2
+    printf '%s\n' "${slurm_ucx_requirements}" >&2
+    exit 1
+fi
 
 printf 'Installing smoke-test RPMs:\n'
 printf '  %s\n' "${install_rpms[@]}"
@@ -123,6 +142,23 @@ for plugin in "${pmix_plugins[@]}"; do
     fi
 done
 
+ucx_linkage="$(
+    while IFS= read -r file; do
+        if [ -f "${file}" ]; then
+            ldd "${file}" 2>/dev/null | grep -Ei 'libuc[mpxts]' || true
+        fi
+    done < <(rpm -ql slurm slurm-slurmctld 2>/dev/null) | sort -u
+)"
+if [ "${expect_ucx}" = "false" ] && [ -n "${ucx_linkage}" ]; then
+    echo "Unexpected UCX shared-library linkage in installed Slurm files:" >&2
+    printf '%s\n' "${ucx_linkage}" >&2
+    exit 1
+fi
+if [ "${expect_ucx}" = "true" ] && [ -z "${slurm_ucx_requirements}" ] && [ -z "${ucx_linkage}" ]; then
+    echo "Expected UCX support, but found no UCX RPM requirement or shared-library linkage" >&2
+    exit 1
+fi
+
 # Slurm's PMIx plugins intentionally leave PMIx API symbols for the plugin
 # loader to resolve, so they do not have a direct libpmix.so DT_NEEDED entry.
 # Successful plugin discovery by srun is the functional linkage check.
@@ -132,3 +168,9 @@ if ! grep -qi 'pmix' <<< "${mpi_list}"; then
     echo "srun did not report PMIx support" >&2
     exit 1
 fi
+for pmix_variant in pmix_v3 pmix_v6; do
+    if ! grep -qw "${pmix_variant}" <<< "${mpi_list}"; then
+        echo "srun did not report ${pmix_variant} support" >&2
+        exit 1
+    fi
+done

@@ -17,6 +17,8 @@ gh workflow run build_slurm.yml --ref master
 gh workflow run build_slurm_without_pmix.yml --ref master
 ```
 
+The GitHub CLI is authenticated and can access this repository, including workflow operations. If a networked `gh` command fails inside the restricted environment, retry it with approved execution outside the sandbox.
+
 Before pushing, run lightweight local checks:
 
 ```bash

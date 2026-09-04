@@ -1,7 +1,18 @@
 name: Build Slurm packages
 run-name: ${{ github.actor }} is building supported pmix/slurm tuples 🚀
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      target_distro:
+        description: Distribution tuple(s) to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - el9
+          - el8
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -36,6 +47,11 @@ jobs:
 
           manifest = json.loads(Path("build-manifest.json").read_text())
           builds = manifest["builds"]
+          target_distro = "${{ inputs.target_distro }}"
+          if target_distro != "all":
+              builds = [build for build in builds if build["distro"] == target_distro]
+          if not builds:
+              raise ValueError(f"No manifest builds selected for {target_distro!r}")
           suffix_counts = {}
           for build in builds:
               for item in build["pmix_builds"]:
@@ -487,6 +503,7 @@ jobs:
       DISTRO: ${{ matrix.distro }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
       RUNTIME_IMAGE: ${{ matrix.runtime_image }}
+      EXPECT_UCX: ${{ matrix.slurm_with_ucx || false }}
 
     steps:
       - name: Checkout repository
@@ -523,7 +540,8 @@ jobs:
             /bin/bash /workspace/scripts/smoke_test_rpms.sh \
             /workspace/smoke_rpms \
             "${SLURM_VERSION}" \
-            true 2>&1 | tee "smoke_test_${DISTRO}.log"
+            true \
+            "${EXPECT_UCX}" 2>&1 | tee "smoke_test_${DISTRO}.log"
 
       - name: Upload smoke-test log
         if: always()
@@ -553,6 +571,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Configure GitHub Pages
+        if: inputs.target_distro == 'all'
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
@@ -651,6 +670,7 @@ jobs:
           done
 
       - name: Install RPM repository tooling
+        if: inputs.target_distro == 'all'
         shell: bash
         run: |
           set -euo pipefail
@@ -658,6 +678,7 @@ jobs:
           sudo apt-get install -y createrepo-c
 
       - name: Create HTTP RPM repositories
+        if: inputs.target_distro == 'all'
         shell: bash
         env:
           PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
@@ -666,6 +687,7 @@ jobs:
           scripts/create_rpm_repository.sh rpms rpm-repository "${PAGES_BASE_URL}"
 
       - name: Upload RPM repositories for GitHub Pages
+        if: inputs.target_distro == 'all'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: rpm-repository
@@ -683,10 +705,13 @@ jobs:
           from pathlib import Path
 
           manifest = json.loads(Path("build-manifest.json").read_text())
+          target_distro = "${{ inputs.target_distro }}"
           lines = ["RPMs containing builds of:"]
 
           for build in manifest["builds"]:
               distro = build["distro"]
+              if target_distro != "all" and distro != target_distro:
+                  continue
               if not re.fullmatch(r"[A-Za-z0-9_-]+", distro):
                   raise ValueError(f"Invalid distro name: {distro!r}")
 
@@ -718,6 +743,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          distro_args=()
+          if [ "${{ inputs.target_distro }}" != "all" ]; then
+            distro_args=(--distro "${{ inputs.target_distro }}")
+          fi
           python3 scripts/create_build_provenance.py \
             --manifest build-manifest.json \
             --fragments provenance/fragments \
@@ -728,6 +757,7 @@ jobs:
             --run-id "${GITHUB_RUN_ID}" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}" \
             --server-url "${GITHUB_SERVER_URL}" \
+            "${distro_args[@]}" \
             --helper-image "rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
 
       - name: Upload consolidated build provenance
@@ -758,6 +788,7 @@ jobs:
 
   deploy_rpm_repository:
     name: Deploy HTTP RPM repositories
+    if: inputs.target_distro == 'all'
     runs-on: ubuntu-latest
     needs: publish_files
     permissions:

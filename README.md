@@ -4,7 +4,13 @@ This repository automates the process of building the [Slurm](https://github.com
 
 Container images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
-Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the full matrix from a single workflow definition. Each tuple can stage multiple PMIx builds for a single Slurm build; the current manifest builds Slurm 26.05.3 against PMIx 3.2.5 and PMIx 6.1.0.
+Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the selected matrix. Each tuple can stage multiple PMIx builds for a single Slurm build. EL9 currently builds Slurm 26.05.4 against PMIx 3.2.5 and PMIx 6.1.0, without UCX or DOCA. EL8 retains its independently configured Slurm version and UCX/DOCA feature set.
+
+Start the `Build Slurm packages` workflow manually and choose `target_distro=el8`, `target_distro=el9`, or `target_distro=all`. The default is `all` for compatibility with existing invocations. For example:
+
+```bash
+gh workflow run build_slurm.yml --ref master -f target_distro=el9
+```
 
 For Rocky8/EL8 clusters that do not need PMIx or InfiniBand support, the repository also provides a separate `Build Slurm packages without PMIx` workflow. It uses the digest-pinned Rocky8 Slurm builder image with NVML/CUDA support enabled and skips the PMIx dependency entirely.
 
@@ -12,7 +18,7 @@ If the workflow needs to pull private GHCR images from `jose-d/images`, define a
 
 ## HTTP RPM repositories
 
-Each successful `Build Slurm packages` workflow publishes the latest RPMs and DNF/YUM repository metadata to [GitHub Pages](https://jose-d.github.io/slurm_for_Rocky9/). Separate repositories are provided for EL8 and EL9.
+A successful distro-only workflow publishes a GitHub Release containing that distro's RPM archive, logs, and filtered build provenance. It does not deploy GitHub Pages. Only a successful `target_distro=all` workflow regenerates and deploys the [GitHub Pages](https://jose-d.github.io/slurm_for_Rocky9/) DNF/YUM repositories after both distro builds and smoke tests pass. Pages therefore represents the latest successful combined build and contains separate repositories for EL8 and EL9; partial runs leave its existing content untouched.
 
 Install the appropriate repository configuration and refresh the metadata, for example on EL9:
 
