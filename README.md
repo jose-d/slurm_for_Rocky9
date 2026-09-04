@@ -18,7 +18,7 @@ If the workflow needs to pull private GHCR images from `jose-d/images`, define a
 
 ## HTTP RPM repositories
 
-A successful distro-only workflow publishes a GitHub Release containing that distro's RPM archive, logs, and filtered build provenance. It does not deploy GitHub Pages. Only a successful `target_distro=all` workflow regenerates and deploys the [GitHub Pages](https://jose-d.github.io/slurm_for_Rocky9/) DNF/YUM repositories after both distro builds and smoke tests pass. Pages therefore represents the latest successful combined build and contains separate repositories for EL8 and EL9; partial runs leave its existing content untouched.
+A successful workflow publishes a GitHub Release containing the selected distro RPM archives, logs, and filtered build provenance. It also regenerates and deploys the [GitHub Pages](https://jose-d.github.io/slurm_for_Rocky9/) DNF/YUM repository from the selected build artifacts after their smoke tests pass. A distro-only run therefore publishes that distro's repository, while `target_distro=all` publishes separate repositories for both EL8 and EL9.
 
 Install the appropriate repository configuration and refresh the metadata, for example on EL9:
 
