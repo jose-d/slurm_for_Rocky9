@@ -43,9 +43,16 @@ EOF
     dnf -y install pmix pmix-devel pmix3 pmix3-devel
 fi
 
-# mkdir for rpmbuild and copy tarball there
+# mkdir for rpmbuild and copy tarball there. The source RPM records the
+# sources' mode and mtime (and every binary RPM records the source RPM's
+# digest), so both are fixed here: the spec was unpacked and patched just now,
+# under the caller's umask.
 mkdir -p "${HOME}/rpmbuild/SOURCES/"
-cp "${GITHUB_WORKSPACE}/slurm-${SLURM_VERSION}.tar.bz2" "$HOME/rpmbuild/SOURCES/"
+install -m 0644 "${GITHUB_WORKSPACE}/slurm-${SLURM_VERSION}.tar.bz2" "$HOME/rpmbuild/SOURCES/"
+chmod 0644 "${SLURM_SPEC_PATH:?SLURM_SPEC_PATH must be set}"
+if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    touch -d "@${SOURCE_DATE_EPOCH}" "$HOME/rpmbuild/SOURCES/slurm-${SLURM_VERSION}.tar.bz2" "${SLURM_SPEC_PATH}"
+fi
 
 # dump rpmlist for build provenance
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_slurm_rpms_${DISTRO}.txt"
