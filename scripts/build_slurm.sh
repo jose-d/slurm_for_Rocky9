@@ -30,6 +30,19 @@ EOF
     dnf -y install --disablerepo='*' --enablerepo=munge-local --allowerasing munge munge-devel
 fi
 
+if [ -d "${GITHUB_WORKSPACE}/http_parser_rpms" ]; then
+    # install http-parser from locally rebuilt RPMs (EL10 does not ship it)
+    cat > /etc/yum.repos.d/http-parser-local.repo << EOF
+[http-parser-local]
+name=Local http-parser RPMs
+baseurl=file://${GITHUB_WORKSPACE}/http_parser_rpms
+enabled=1
+gpgcheck=0
+EOF
+
+    dnf -y install --disablerepo='*' --enablerepo=http-parser-local http-parser http-parser-devel
+fi
+
 if [ "${SLURM_WITH_PMIX:-true}" = "true" ]; then
     # install deps
     cat > /etc/yum.repos.d/pmix-local.repo << EOF

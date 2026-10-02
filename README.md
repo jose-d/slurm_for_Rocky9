@@ -6,7 +6,7 @@ Container images from the [jose-d/images](https://github.com/jose-d/images) repo
 
 Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the selected matrix. Each tuple can stage multiple PMIx builds for a single Slurm build. EL9 currently builds Slurm 26.05.4 against PMIx 3.2.5 and PMIx 6.1.0, without UCX or DOCA. EL8 retains its independently configured Slurm version and UCX/DOCA feature set.
 
-EL10 builds Slurm 25.11.5 (not newer than the cluster's 25.11.5 `slurmctld`) against PMIx 3.2.5 and PMIx 6.1.0 with UCX (from DOCA 3.5.0), NVML (CUDA 13.4 `cuda-nvml-devel` from NVIDIA's RHEL10 repository) and RPATH; see [EL10](#el10) for the plugins that cannot be built there.
+EL10 builds Slurm 25.11.8 against PMIx 3.2.5 and PMIx 6.1.0 with UCX (from DOCA 3.5.0), NVML (CUDA 13.4 `cuda-nvml-devel` from NVIDIA's RHEL10 repository), RPATH and `slurmrestd`, using an http-parser package rebuilt from Rocky 9 (see [EL10](#el10)). Slurm daemons must not be newer than the `slurmctld` they talk to.
 
 Start the `Build Slurm packages` workflow manually and choose `target_distro=el8`, `target_distro=el9`, `target_distro=el10`, or `target_distro=all`. The default is `all` for compatibility with existing invocations. For example:
 
@@ -31,7 +31,7 @@ cd slurm_for_Rocky9
 scripts/build_local.sh el10
 ```
 
-The result is `local-build/rpm_tarball_<distro>_<RELTAG>.tar.gz` with the workflow's `rpms/{pmix,munge,slurm}/` layout; logs, `rpmbuild` commands and builder package lists are in `local-build/<distro>/logs/`. Digest-pinned builder images are pulled when available; otherwise (for example while the manifest still has placeholder references, or for private images) the builder images are built locally from `../images/docker/<dist>/<image>/Dockerfile`, including their parent images. Useful variables: `RELTAG`, `SOURCE_DATE_EPOCH`, `IMAGES_REPO`, `LOCAL_IMAGES=auto|always|never`, `REBUILD_IMAGES=1`, `OUTPUT_DIR`, `CONTAINER_ENGINE` (see the script header).
+The result is `local-build/rpm_tarball_<distro>_<RELTAG>.tar.gz` with the workflow's `rpms/{pmix,munge,slurm}/` layout (plus `rpms/http-parser/` for EL10); logs, `rpmbuild` commands and builder package lists are in `local-build/<distro>/logs/`. Digest-pinned builder images are pulled when available; otherwise (for example while the manifest still has placeholder references, or for private images) the builder images are built locally from `../images/docker/<dist>/<image>/Dockerfile`, including their parent images. Useful variables: `RELTAG`, `SOURCE_DATE_EPOCH`, `IMAGES_REPO`, `LOCAL_IMAGES=auto|always|never`, `REBUILD_IMAGES=1`, `OUTPUT_DIR`, `CONTAINER_ENGINE` (see the script header).
 
 ### Reproducibility
 
@@ -50,12 +50,17 @@ The EL10 builder images are published from `jose-d/images` (`docker/rocky10/`, w
 
 The EL10 smoke test additionally requires every plugin in the tuple's `expected_slurm_plugins` and checks that all installed plugins resolve their libraries from Rocky 10 (with CRB), EPEL 10 and DOCA 3.5.0 (except the driver's `libnvidia-ml`).
 
-Plugins of the EL8 production node that are not built on EL10:
+### http-parser
 
-| Plugin | Reason |
-| --- | --- |
-| `http_parser` (`http_parser_libhttp_parser`) | `http-parser`/`http-parser-devel` is not shipped in Rocky 10 BaseOS/AppStream/CRB or EPEL 10. |
-| `rest_auth_jwt` (and the other `rest_auth_*` plugins, `slurmrestd` itself) | Slurm's configure refuses to build `slurmrestd` without http-parser, so the tuple sets `slurm_with_slurmrestd: false`. These plugins are only used by `slurmrestd`, which does not run on compute nodes. |
+Slurm 25.11 needs [http-parser](https://github.com/nodejs/http-parser) for `slurmrestd` and its `http_parser_libhttp_parser`, `rest_auth_*` and `openapi_*` plugins, but Rocky 10 (BaseOS, AppStream, CRB) and EPEL 10 no longer ship it. The `el10` tuple therefore has an `http_parser` entry, and the workflow's `build_http_parser` job (or the corresponding `scripts/build_local.sh` step) rebuilds Rocky 9 AppStream's `http-parser-2.9.4-6.el9.src.rpm` in the EL10 Slurm builder with `scripts/build_http_parser.sh`:
+
+- the source RPM and the Rocky 9 release key (`RPM-GPG-KEY-Rocky-9`) are downloaded with their SHA-256 checksums from the manifest, and the source RPM's signature is verified against that key (fingerprint `21CB 256A E16F C54C 6E65 2949 702D 426D 350D 275D`) in a throw-away rpm database;
+- the release becomes `6.<RELTAG>.el10` (upstream release plus the build's release tag), with the same reproducibility settings as the other packages;
+- the resulting `http-parser` and `http-parser-devel` are installed from a local repository before the Slurm build, like Munge, and published in `rpms/http-parser/` of the release tarball and in the EL10 DNF repository. EL10 nodes need them installed together with `slurm`.
+
+Tuples without an `http_parser` entry (EL8, EL9) keep using the distribution's http-parser and are unchanged. The spec's `BuildRequires: meson` is installed at build time if the builder image does not contain it.
+
+This is a stop-gap for Slurm 25.11. SchedMD [bug 21801](https://support.schedmd.com/show_bug.cgi?id=21801) (a duplicate of [bug 20785](https://support.schedmd.com/show_bug.cgi?id=20785)) tracks the dependency on the unmaintained http-parser: Slurm 26.05.0 adds `http_parser/llhttp_parser` and `url_parser/internal`, and that is not backported to 25.11. Rocky 10 AppStream ships `llhttp`/`llhttp-devel` 9.1.3, so when the `el10` tuple moves to Slurm 26.05 it should build against llhttp and drop the `http_parser` entry and package.
 
 ## HTTP RPM repositories
 

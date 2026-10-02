@@ -2,7 +2,8 @@
 # Build one manifest tuple locally with podman, in the same sequence as
 # .github/workflows/build_slurm.yml: PMIx builds, Munge, Slurm, then the
 # fresh-container smoke test. Produces rpm_tarball_<distro>_<RELTAG>.tar.gz
-# with the workflow's rpms/{pmix,munge,slurm}/ layout.
+# with the workflow's rpms/{pmix,munge,slurm}/ layout (plus rpms/http-parser/
+# for tuples with an "http_parser" entry).
 #
 # Usage: scripts/build_local.sh DISTRO
 #
@@ -122,6 +123,24 @@ slurm_with_ucx="$(manifest_get slurm_with_ucx false)"
 slurm_with_rpath="$(manifest_get slurm_with_rpath false)"
 slurm_with_slurmrestd="$(manifest_get slurm_with_slurmrestd true)"
 expected_slurm_plugins="$(manifest_get expected_slurm_plugins)"
+http_parser_tsv="$(python3 - "${manifest}" "${distro}" <<'PY'
+import json
+import sys
+
+manifest_path, distro = sys.argv[1:3]
+build = [b for b in json.load(open(manifest_path))["builds"] if b["distro"] == distro][0]
+item = build.get("http_parser")
+if item:
+    print("\t".join([
+        item["version"],
+        item["srpm_url"],
+        item["sha256"],
+        item.get("signing_key_url", ""),
+        item.get("signing_key_sha256", ""),
+        item.get("signing_key_fingerprint", ""),
+    ]))
+PY
+)"
 mapfile -t pmix_builds < <(pmix_builds_tsv)
 pmix_paths="$(printf '%s\n' "${pmix_builds[@]}" | cut -f5 | paste -sd:)"
 
@@ -148,6 +167,7 @@ tarball="${output_dir}/rpm_tarball_${distro}_${RELTAG}.tar.gz"
 echo "distro:            ${distro}"
 echo "slurm:             ${slurm_version}"
 echo "munge:             ${munge_version}"
+echo "http-parser:       $(cut -f1 <<< "${http_parser_tsv:-none}")"
 echo "pmix:              $(printf '%s\n' "${pmix_builds[@]}" | awk -F'\t' '{printf "%s-%s ", $4, $1}')"
 echo "RELTAG:            ${RELTAG}"
 echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH} ($(date -u -d "@${SOURCE_DATE_EPOCH}" --iso-8601=seconds))"
@@ -273,6 +293,11 @@ mkdir -p "${work_root}" "${log_dir}"
 rpm_out="${output_dir}/${distro}/rpms"
 rm -rf "${rpm_out}"
 mkdir -p "${rpm_out}/pmix" "${rpm_out}/munge" "${rpm_out}/slurm"
+rpm_subdirs=(pmix munge slurm)
+if [ -n "${http_parser_tsv}" ]; then
+    mkdir -p "${rpm_out}/http-parser"
+    rpm_subdirs+=(http-parser)
+fi
 
 log "Resolving builder images"
 resolve_builder_image "${pmix_builder_ref}" pmix_image
@@ -312,9 +337,37 @@ run_in "${ws}" "${slurm_image}" "${log_dir}/munge_build_${distro}.log" \
 cp "${ws}"/rpms/*.rpm "${rpm_out}/munge/"
 cp "${ws}"/image_munge_rpms_*.txt "${ws}"/rpmbuild_munge_*.txt "${log_dir}/"
 
+if [ -n "${http_parser_tsv}" ]; then
+    IFS=$'\t' read -r hp_version hp_url hp_sha256 hp_key_url hp_key_sha256 hp_key_fpr <<< "${http_parser_tsv}"
+    log "Building http-parser ${hp_version}"
+    ws="$(new_workspace http-parser)"
+    hp_srpm="${hp_url##*/}"
+    fetch "${hp_url}" "${hp_srpm}" "${hp_sha256}" "${ws}"
+    hp_key_env=()
+    if [ -n "${hp_key_url}" ]; then
+        hp_key="${hp_key_url##*/}"
+        fetch "${hp_key_url}" "${hp_key}" "${hp_key_sha256}" "${ws}"
+        hp_key_env=(--env "HTTP_PARSER_SIGNING_KEY=${hp_key}" --env "HTTP_PARSER_SIGNING_KEY_FINGERPRINT=${hp_key_fpr}")
+    fi
+    run_in "${ws}" "${slurm_image}" "${log_dir}/http_parser_build_${distro}.log" \
+        --env "DISTRO=${distro}" \
+        --env "HTTP_PARSER_RELTAG=${RELTAG}" \
+        --env "HTTP_PARSER_VERSION=${hp_version}" \
+        --env "HTTP_PARSER_SRPM=${hp_srpm}" \
+        "${hp_key_env[@]}" \
+        -- /bin/bash "${script_dir}/build_http_parser.sh"
+    cp "${ws}"/rpms/*.rpm "${rpm_out}/http-parser/"
+    cp "${ws}"/image_http_parser_rpms_*.txt "${ws}"/rpmbuild_http_parser_*.txt "${log_dir}/"
+fi
+
 log "Building Slurm ${slurm_version}"
 ws="$(new_workspace slurm)"
 mkdir -p "${ws}/pmix_rpms" "${ws}/munge_rpms"
+if [ -n "${http_parser_tsv}" ]; then
+    mkdir -p "${ws}/http_parser_rpms"
+    cp "${rpm_out}"/http-parser/*.rpm "${ws}/http_parser_rpms/"
+    createrepo_in "${slurm_image}" "${ws}/http_parser_rpms"
+fi
 cp "${rpm_out}"/pmix/*.rpm "${ws}/pmix_rpms/"
 cp "${rpm_out}"/munge/*.rpm "${ws}/munge_rpms/"
 createrepo_in "${slurm_image}" "${ws}/pmix_rpms"
@@ -348,7 +401,9 @@ else
     log "Smoke testing ${distro} RPMs in a fresh ${runtime_image} container"
     ws="$(new_workspace smoke)"
     mkdir -p "${ws}/smoke_rpms"
-    cp -r "${rpm_out}/pmix" "${rpm_out}/munge" "${rpm_out}/slurm" "${ws}/smoke_rpms/"
+    for subdir in "${rpm_subdirs[@]}"; do
+        cp -r "${rpm_out}/${subdir}" "${ws}/smoke_rpms/"
+    done
     run_in "${ws}" "${runtime_image}" "${log_dir}/smoke_test_${distro}.log" \
         --env "EXPECT_SLURM_PLUGINS=${expected_slurm_plugins}" \
         -- /bin/bash "${container_workspace}/scripts/smoke_test_rpms.sh" \
@@ -360,7 +415,9 @@ log "Creating ${tarball}"
 staging="$(mktemp -d)"
 trap 'rm -rf "${staging}"' EXIT
 mkdir -p "${staging}/rpms"
-cp -r "${rpm_out}/pmix" "${rpm_out}/munge" "${rpm_out}/slurm" "${staging}/rpms/"
+for subdir in "${rpm_subdirs[@]}"; do
+    cp -r "${rpm_out}/${subdir}" "${staging}/rpms/"
+done
 tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner --mode=u+rwX,go+rX,go-w \
     --format=gnu -C "${staging}" -cf - rpms | gzip -9 -n > "${tarball}"
 

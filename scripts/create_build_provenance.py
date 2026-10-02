@@ -102,6 +102,26 @@ def main():
             distro,
         )
 
+        http_parser = build.get("http_parser")
+        if http_parser:
+            add_source(
+                f"http-parser-{http_parser['version']}",
+                "http-parser",
+                http_parser["version"],
+                http_parser["srpm_url"],
+                http_parser["sha256"],
+                distro,
+            )
+            if http_parser.get("signing_key_url"):
+                add_source(
+                    f"http-parser-signing-key-{http_parser['signing_key_fingerprint']}",
+                    "http-parser-signing-key",
+                    http_parser["signing_key_fingerprint"],
+                    http_parser["signing_key_url"],
+                    http_parser["signing_key_sha256"],
+                    distro,
+                )
+
         images.append(
             {
                 "distro": distro,

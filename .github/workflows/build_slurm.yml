@@ -38,6 +38,8 @@ jobs:
       matrix: ${{ steps.generate.outputs.matrix }}
       pmix_matrix: ${{ steps.generate.outputs.pmix_matrix }}
       munge_matrix: ${{ steps.generate.outputs.munge_matrix }}
+      http_parser_matrix: ${{ steps.generate.outputs.http_parser_matrix }}
+      has_http_parser: ${{ steps.generate.outputs.has_http_parser }}
 
     steps:
       - name: Checkout repository
@@ -111,6 +113,7 @@ jobs:
               build["pmix_paths"] = ":".join(item["install_path"] for item in pmix_builds)
               build["expected_slurm_plugins"] = " ".join(build.get("expected_slurm_plugins", []))
               build["slurm_with_slurmrestd"] = build.get("slurm_with_slurmrestd", True)
+              build["http_parser_version"] = build.get("http_parser", {}).get("version", "")
               build["pmix_release_label"] = " + ".join(
                   f"PMIx {item['version']}" for item in pmix_builds
               )
@@ -158,10 +161,40 @@ jobs:
               separators=(",", ":"),
           )
 
+          # One entry per selected tuple (so the matrix is never empty); the
+          # build steps only run for tuples with an "http_parser" entry, i.e.
+          # distributions that no longer ship http-parser (EL10).
+          http_parser_matrix_entries = []
+          for build in builds:
+              item = build.get("http_parser") or {}
+              http_parser_matrix_entries.append(
+                  {
+                      "distro": build["distro"],
+                      "http_parser_version": item.get("version", ""),
+                      "http_parser_srpm_url": item.get("srpm_url", ""),
+                      "http_parser_sha256": item.get("sha256", ""),
+                      "http_parser_signing_key_url": item.get("signing_key_url", ""),
+                      "http_parser_signing_key_sha256": item.get("signing_key_sha256", ""),
+                      "http_parser_signing_key_fingerprint": item.get("signing_key_fingerprint", ""),
+                      "http_parser_builder_image": build["slurm_builder_image"],
+                      "script_dir": build["script_dir"],
+                      "http_parser_artifact_suffix": (
+                          f"{build['distro']}-http-parser-{item.get('version', 'none')}"
+                      ),
+                  }
+              )
+          http_parser_matrix = json.dumps(
+              {"include": http_parser_matrix_entries},
+              separators=(",", ":"),
+          )
+          has_http_parser = any(build.get("http_parser") for build in builds)
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"matrix={matrix}\n")
               output.write(f"pmix_matrix={pmix_matrix}\n")
               output.write(f"munge_matrix={munge_matrix}\n")
+              output.write(f"http_parser_matrix={http_parser_matrix}\n")
+              output.write(f"has_http_parser={'true' if has_http_parser else 'false'}\n")
           PY
 
   build_pmix:
@@ -338,6 +371,110 @@ jobs:
           if-no-files-found: error
           path: ${{ github.workspace }}/rpms/*.rpm
 
+  build_http_parser:
+    name: Build http-parser ${{ matrix.distro }} ${{ matrix.http_parser_version || '(distribution package)' }}
+    runs-on: ubuntu-latest
+    needs: prolog
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prolog.outputs.http_parser_matrix) }}
+    env:
+      GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
+      GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
+      RELTAG: ${{ needs.prolog.outputs.reltag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prolog.outputs.source_date_epoch }}
+      DISTRO: ${{ matrix.distro }}
+      HTTP_PARSER_VERSION: ${{ matrix.http_parser_version }}
+      HTTP_PARSER_SRPM_URL: ${{ matrix.http_parser_srpm_url }}
+      HTTP_PARSER_SHA256: ${{ matrix.http_parser_sha256 }}
+      HTTP_PARSER_SIGNING_KEY_URL: ${{ matrix.http_parser_signing_key_url }}
+      HTTP_PARSER_SIGNING_KEY_SHA256: ${{ matrix.http_parser_signing_key_sha256 }}
+      HTTP_PARSER_SIGNING_KEY_FINGERPRINT: ${{ matrix.http_parser_signing_key_fingerprint }}
+      HTTP_PARSER_BUILDER_IMAGE: ${{ matrix.http_parser_builder_image }}
+      BUILD_SCRIPT_DIR: ${{ matrix.script_dir }}
+      HTTP_PARSER_ARTIFACT_SUFFIX: ${{ matrix.http_parser_artifact_suffix }}
+
+    steps:
+      - name: Nothing to build
+        if: matrix.http_parser_version == ''
+        run: echo "${DISTRO} uses the distribution's http-parser"
+
+      - name: Checkout repository
+        if: matrix.http_parser_version != ''
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download http-parser source RPM and signing key
+        if: matrix.http_parser_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/download_verified.sh \
+            "${HTTP_PARSER_SRPM_URL}" \
+            "${HTTP_PARSER_SRPM_URL##*/}" \
+            "${HTTP_PARSER_SHA256}"
+          if [ -n "${HTTP_PARSER_SIGNING_KEY_URL}" ]; then
+            scripts/download_verified.sh \
+              "${HTTP_PARSER_SIGNING_KEY_URL}" \
+              "${HTTP_PARSER_SIGNING_KEY_URL##*/}" \
+              "${HTTP_PARSER_SIGNING_KEY_SHA256}"
+          fi
+
+      - name: Login to ghcr registry with docker and build http-parser
+        if: matrix.http_parser_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
+          key_args=()
+          if [ -n "${HTTP_PARSER_SIGNING_KEY_URL}" ]; then
+            key_args=(
+              --env HTTP_PARSER_SIGNING_KEY="${HTTP_PARSER_SIGNING_KEY_URL##*/}"
+              --env HTTP_PARSER_SIGNING_KEY_FINGERPRINT="${HTTP_PARSER_SIGNING_KEY_FINGERPRINT}"
+            )
+          fi
+          docker run \
+                     --hostname reproducible \
+                     --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
+                     --env DISTRO="${DISTRO}" \
+                     --env HTTP_PARSER_RELTAG="${RELTAG}" \
+                     --env HTTP_PARSER_VERSION="${HTTP_PARSER_VERSION}" \
+                     --env HTTP_PARSER_SRPM="${HTTP_PARSER_SRPM_URL##*/}" \
+                     "${key_args[@]}" \
+                     --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+                     -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+                     -w "${GITHUB_WORKSPACE}" \
+                     "${HTTP_PARSER_BUILDER_IMAGE}" \
+                     /bin/bash "${BUILD_SCRIPT_DIR}/build_http_parser.sh" 2>&1 | tee "http_parser_build_${DISTRO}.log"
+
+      - name: Upload http-parser build log as artifact
+        if: matrix.http_parser_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ env.HTTP_PARSER_ARTIFACT_SUFFIX }}-build.log
+          if-no-files-found: error
+          path: ${{ github.workspace }}/http_parser_build_${{ matrix.distro }}.log
+
+      - name: Upload http-parser rpm list as artifact
+        if: matrix.http_parser_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ env.HTTP_PARSER_ARTIFACT_SUFFIX }}-image_http_parser_rpms.txt
+          if-no-files-found: error
+          path: |
+            ${{ github.workspace }}/image_http_parser_rpms_${{ matrix.distro }}.txt
+            ${{ github.workspace }}/rpmbuild_http_parser_${{ matrix.distro }}.txt
+
+      - name: Upload http-parser rpms as artifacts
+        if: matrix.http_parser_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ env.HTTP_PARSER_ARTIFACT_SUFFIX }}-rpms
+          if-no-files-found: error
+          path: ${{ github.workspace }}/rpms/*.rpm
+
   build_slurm:
     name: Build ${{ matrix.distro }}
     runs-on: ubuntu-latest
@@ -345,6 +482,7 @@ jobs:
       - prolog
       - build_pmix
       - build_munge
+      - build_http_parser
     permissions:
       contents: read
       packages: read
@@ -452,6 +590,31 @@ jobs:
             -v "${MUNGE_RPMS_DIR}:${MUNGE_RPMS_DIR}" \
             rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
             bash -c "dnf install -y createrepo_c && createrepo_c ${MUNGE_RPMS_DIR}"
+
+      - name: Download http-parser rpms for current distro
+        if: matrix.http_parser_version != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ matrix.distro }}-http-parser-*-rpms
+          path: ${{ github.workspace }}/http_parser_rpms
+          merge-multiple: true
+
+      - name: Create http-parser RPM repository
+        if: matrix.http_parser_version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTTP_PARSER_RPMS_DIR="${GITHUB_WORKSPACE}/http_parser_rpms"
+          mapfile -t http_parser_rpms < <(find "${HTTP_PARSER_RPMS_DIR}" -type f -name '*.rpm')
+          if [ "${#http_parser_rpms[@]}" -eq 0 ]; then
+            echo "No http-parser RPMs were downloaded" >&2
+            exit 1
+          fi
+          printf '%s\n' "${http_parser_rpms[@]}" | sort
+          docker run --rm \
+            -v "${HTTP_PARSER_RPMS_DIR}:${HTTP_PARSER_RPMS_DIR}" \
+            rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
+            bash -c "dnf install -y createrepo_c && createrepo_c ${HTTP_PARSER_RPMS_DIR}"
 
       - name: Cache Slurm tarball
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -586,6 +749,14 @@ jobs:
           path: smoke_rpms/slurm
           merge-multiple: true
 
+      - name: Download http-parser RPMs
+        if: matrix.http_parser_version != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ matrix.distro }}-http-parser-*-rpms
+          path: smoke_rpms/http-parser
+          merge-multiple: true
+
       - name: Install and smoke test RPMs in a fresh container
         shell: bash
         run: |
@@ -618,6 +789,7 @@ jobs:
       - prolog
       - build_pmix
       - build_munge
+      - build_http_parser
       - build_slurm
       - smoke_test
     env:
@@ -651,6 +823,22 @@ jobs:
         with:
           pattern: "*-slurm_rpms"
           path: rpms/slurm
+          merge-multiple: true
+
+      - name: Download http-parser rpms
+        if: needs.prolog.outputs.has_http_parser == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: "*-http-parser-*-rpms"
+          path: rpms/http-parser
+          merge-multiple: true
+
+      - name: Download http-parser build logs
+        if: needs.prolog.outputs.has_http_parser == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: "*-http-parser-*-build.log"
+          path: logs
           merge-multiple: true
 
       - name: Download PMIx build logs

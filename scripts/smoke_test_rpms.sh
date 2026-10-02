@@ -84,6 +84,23 @@ required_packages=(munge munge-libs slurm slurm-slurmctld)
 if [ "${expect_pmix}" = "true" ]; then
     required_packages+=(pmix pmix3 pmix3-libpmi)
 fi
+# Tuples that rebuild http-parser (EL10) ship it next to the Slurm RPMs; the
+# smoke test must use that build, not anything from a distribution repository.
+for rpm_path in "${all_rpms[@]}"; do
+    if [ "$(rpm -qp --queryformat '%{NAME}' "${rpm_path}")" = "http-parser" ]; then
+        required_packages+=(http-parser)
+        break
+    fi
+done
+# Expecting slurmrestd's authentication plugins means slurmrestd itself must
+# be installable and runnable.
+expect_slurmrestd=false
+case " ${EXPECT_SLURM_PLUGINS:-} " in
+    *" rest_auth_"*) expect_slurmrestd=true ;;
+esac
+if [ "${expect_slurmrestd}" = "true" ]; then
+    required_packages+=(slurm-slurmrestd)
+fi
 
 install_rpms=()
 for package_name in "${required_packages[@]}"; do
@@ -124,6 +141,19 @@ for binary in slurmctld srun; do
         exit 1
     fi
 done
+
+if [ "${expect_slurmrestd}" = "true" ]; then
+    actual_output="$(SLURM_CONF="${smoke_slurm_conf}" slurmrestd -V)"
+    printf 'slurmrestd -V: %s\n' "${actual_output}"
+    if [ "${actual_output}" != "${expected_output}" ]; then
+        echo "Unexpected slurmrestd version; expected ${expected_output}" >&2
+        exit 1
+    fi
+    if rpm -q http-parser >/dev/null 2>&1; then
+        printf 'http-parser in use: %s (%s)\n' "$(rpm -q http-parser)" \
+            "$(ldd /usr/lib64/slurm/http_parser_libhttp_parser.so | grep -o 'libhttp_parser[^ ]* => [^ ]*' || echo 'not linked')"
+    fi
+fi
 
 # Report the plugin set shipped in the Slurm RPMs; optionally require some.
 # EXPECT_SLURM_PLUGINS is a whitespace-separated list of plugin names without
