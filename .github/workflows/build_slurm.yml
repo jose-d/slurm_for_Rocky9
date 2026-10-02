@@ -11,8 +11,17 @@ on:
         type: choice
         options:
           - all
+          - el10
           - el9
           - el8
+      reltag:
+        description: >-
+          RPM release tag. Empty: current UTC timestamp (previous behaviour);
+          "commit": UTC timestamp of the commit time (reproducible, same as
+          scripts/build_local.sh); anything else is used verbatim.
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -25,6 +34,7 @@ jobs:
       contents: read
     outputs:
       reltag: ${{ steps.generate.outputs.reltag }}
+      source_date_epoch: ${{ steps.generate.outputs.source_date_epoch }}
       matrix: ${{ steps.generate.outputs.matrix }}
       pmix_matrix: ${{ steps.generate.outputs.pmix_matrix }}
       munge_matrix: ${{ steps.generate.outputs.munge_matrix }}
@@ -36,20 +46,54 @@ jobs:
       - name: Generate matrices from manifest
         id: generate
         shell: bash
+        env:
+          RELTAG_INPUT: ${{ inputs.reltag }}
         run: |
           set -euo pipefail
-          RELTAG="$(date +%Y%m%d%H%M%S)"
+          # RPM build times and clamped file mtimes always come from the
+          # commit time, so rebuilding a commit gives the same timestamps.
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
+          case "${RELTAG_INPUT}" in
+            "") RELTAG="$(date -u +%Y%m%d%H%M%S)" ;;
+            commit) RELTAG="$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y%m%d%H%M%S)" ;;
+            *) RELTAG="${RELTAG_INPUT}" ;;
+          esac
+          if [[ ! "${RELTAG}" =~ ^[0-9A-Za-z_.+]+$ ]]; then
+            echo "Invalid RPM release tag: ${RELTAG}" >&2
+            exit 1
+          fi
           echo "reltag=${RELTAG}" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=${SOURCE_DATE_EPOCH}" >> "$GITHUB_OUTPUT"
           python <<'PY'
           import json
           import os
+          import re
           from pathlib import Path
 
           manifest = json.loads(Path("build-manifest.json").read_text())
           builds = manifest["builds"]
           target_distro = "${{ inputs.target_distro }}"
+          def digest_pinned(build):
+              return all(
+                  re.search(r"@sha256:[0-9a-fA-F]{64}$", build[key])
+                  for key in ("pmix_builder_image", "slurm_builder_image", "runtime_image")
+              )
+
           if target_distro != "all":
               builds = [build for build in builds if build["distro"] == target_distro]
+              unpinned = [build["distro"] for build in builds if not digest_pinned(build)]
+              if unpinned:
+                  raise ValueError(
+                      f"{unpinned} builder images are not published/digest-pinned yet; "
+                      "publish them from jose-d/images and update build-manifest.json"
+                  )
+          else:
+              # Tuples whose builder images are still local placeholders
+              # (see README) are built with scripts/build_local.sh only.
+              for build in builds:
+                  if not digest_pinned(build):
+                      print(f"::warning::Skipping {build['distro']}: builder images are not digest-pinned")
+              builds = [build for build in builds if digest_pinned(build)]
           if not builds:
               raise ValueError(f"No manifest builds selected for {target_distro!r}")
           suffix_counts = {}
@@ -65,6 +109,8 @@ jobs:
           for build in builds:
               pmix_builds = build["pmix_builds"]
               build["pmix_paths"] = ":".join(item["install_path"] for item in pmix_builds)
+              build["expected_slurm_plugins"] = " ".join(build.get("expected_slurm_plugins", []))
+              build["slurm_with_slurmrestd"] = build.get("slurm_with_slurmrestd", True)
               build["pmix_release_label"] = " + ".join(
                   f"PMIx {item['version']}" for item in pmix_builds
               )
@@ -132,6 +178,7 @@ jobs:
       GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
       GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prolog.outputs.source_date_epoch }}
       DISTRO: ${{ matrix.distro }}
       PMIX_VERSION: ${{ matrix.pmix_version }}
       PMIX_SRCRPM_RELEASE: ${{ matrix.pmix_srcrpm_release }}
@@ -170,6 +217,8 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --hostname reproducible \
+                     --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
                      --env DISTRO="${DISTRO}" \
                      --env PMIX_RELTAG="${RELTAG}" \
                      --env PMIX_VERSION="${PMIX_VERSION}" \
@@ -219,6 +268,7 @@ jobs:
       GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
       GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prolog.outputs.source_date_epoch }}
       DISTRO: ${{ matrix.distro }}
       MUNGE_VERSION: ${{ matrix.munge_version }}
       MUNGE_SHA256: ${{ matrix.munge_sha256 }}
@@ -254,6 +304,8 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --hostname reproducible \
+                     --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
                      --env DISTRO="${DISTRO}" \
                      --env MUNGE_RELTAG="${RELTAG}" \
                      --env MUNGE_VERSION="${MUNGE_VERSION}" \
@@ -303,6 +355,7 @@ jobs:
       GHCR_U: ${{ vars.GHCR_U || github.repository_owner }}
       GHCR_S: ${{ secrets.GHCR_S || secrets.GITHUB_TOKEN }}
       RELTAG: ${{ needs.prolog.outputs.reltag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prolog.outputs.source_date_epoch }}
       DISTRO: ${{ matrix.distro }}
       SLURM_VERSION: ${{ matrix.slurm_version }}
       SLURM_SHA256: ${{ matrix.slurm_sha256 }}
@@ -314,6 +367,7 @@ jobs:
       SLURM_UCX_PATH: ${{ matrix.slurm_ucx_path || '' }}
       SLURM_WITH_UCX: ${{ matrix.slurm_with_ucx || false }}
       SLURM_WITH_RPATH: ${{ matrix.slurm_with_rpath || false }}
+      SLURM_WITH_SLURMRESTD: ${{ matrix.slurm_with_slurmrestd }}
 
     steps:
       - name: Checkout repository
@@ -415,9 +469,7 @@ jobs:
             "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2" \
             "slurm-${SLURM_VERSION}.tar.bz2" \
             "${SLURM_SHA256}"
-          tar -xf "slurm-${SLURM_VERSION}.tar.bz2"
-          sed -i "s/^%define rel.*$/%define rel     ${RELTAG}/g" "${SLURM_SPEC_PATH}"
-          sed -i "s/^%global slurm_source_dir.*$/%global slurm_source_dir %{name}-%{version}/g" "${SLURM_SPEC_PATH}"
+          scripts/prepare_slurm_spec.sh "${SLURM_VERSION}" "${RELTAG}"
 
       - name: Login to ghcr registry with docker and build Slurm
         shell: bash
@@ -425,6 +477,8 @@ jobs:
           set -euo pipefail
           echo "$GHCR_S" | docker login ghcr.io -u "$GHCR_U" --password-stdin
           docker run \
+                     --hostname reproducible \
+                     --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
                      --env DISTRO="${DISTRO}" \
                      --env SLURM_RELTAG="${RELTAG}" \
                      --env SLURM_VERSION="${SLURM_VERSION}" \
@@ -434,6 +488,7 @@ jobs:
                      --env SLURM_UCX_PATH="${SLURM_UCX_PATH}" \
                      --env SLURM_WITH_UCX="${SLURM_WITH_UCX}" \
                      --env SLURM_WITH_RPATH="${SLURM_WITH_RPATH}" \
+                     --env SLURM_WITH_SLURMRESTD="${SLURM_WITH_SLURMRESTD}" \
                       --env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
                       -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
                       -w "${GITHUB_WORKSPACE}" \
@@ -504,6 +559,7 @@ jobs:
       SLURM_VERSION: ${{ matrix.slurm_version }}
       RUNTIME_IMAGE: ${{ matrix.runtime_image }}
       EXPECT_UCX: ${{ matrix.slurm_with_ucx || false }}
+      EXPECT_SLURM_PLUGINS: ${{ matrix.expected_slurm_plugins || '' }}
 
     steps:
       - name: Checkout repository
@@ -535,6 +591,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm \
+            --env EXPECT_SLURM_PLUGINS="${EXPECT_SLURM_PLUGINS}" \
             -v "${GITHUB_WORKSPACE}:/workspace:ro" \
             "${RUNTIME_IMAGE}" \
             /bin/bash /workspace/scripts/smoke_test_rpms.sh \
@@ -710,6 +767,9 @@ jobs:
                   continue
               if not re.fullmatch(r"[A-Za-z0-9_-]+", distro):
                   raise ValueError(f"Invalid distro name: {distro!r}")
+              if target_distro == "all" and not Path(f"cuda_versions/cuda_version_{distro}.txt").exists():
+                  # Not built: builder images not digest-pinned yet (skipped in prolog).
+                  continue
 
               pmix_label = " + ".join(
                   f"PMIx {item['version']}" for item in build["pmix_builds"]

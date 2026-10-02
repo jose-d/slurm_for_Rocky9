@@ -59,4 +59,16 @@ if [ -n "${version}" ]; then
     exit 0
 fi
 
+# Images that only carry cuda-nvml-devel (EL10) have a versioned
+# /usr/local/cuda-X.Y prefix but no /usr/local/cuda symlink.
+version="$(
+    for cuda_root in /usr/local/cuda-*; do
+        [ -d "${cuda_root}" ] && printf '%s\n' "${cuda_root##*/cuda-}"
+    done | grep -E '^[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true
+)"
+if [ -n "${version}" ]; then
+    printf '%s\n' "${version}"
+    exit 0
+fi
+
 printf '%s\n' unknown

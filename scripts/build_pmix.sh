@@ -8,6 +8,10 @@ PMIX_SRCRPM_RELEASE="${PMIX_SRCRPM_RELEASE:?PMIX_SRCRPM_RELEASE must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 DISTRO="${DISTRO:?DISTRO must be set}"
 
+# shellcheck source=scripts/rpm_reproducibility.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rpm_reproducibility.sh"
+configure_reproducible_rpmbuild
+
 # print input vars
 echo "PMIX_RELTAG: ${PMIX_RELTAG}, PMIX_VERSION: ${PMIX_VERSION}, PMIX_SRCRPM_RELEASE: ${PMIX_SRCRPM_RELEASE}, PMIX_PACKAGE_NAME: ${PMIX_PACKAGE_NAME:-pmix}"
 
@@ -100,7 +104,18 @@ if [ -n "${PMIX_PACKAGE_NAME:-}" ] && [ "${PMIX_PACKAGE_NAME}" != "pmix" ]; then
     rpmbuild_cmd+=(--define "_name ${PMIX_PACKAGE_NAME}")
 fi
 
+if [ "$(rpm -E '%{rhel}')" -ge 10 ]; then
+    # The PMIx spec redefines %_prefix to /opt/..., which turns %__perl into
+    # /opt/<name>/<version>/bin/perl. On EL10 the empty perl macros make
+    # perlcompat.attr match every .so and emit an unsatisfiable, unversioned
+    # perl(:MODULE_COMPAT_) requirement. Point it at the system perl.
+    rpmbuild_cmd+=(--define '__perl /usr/bin/perl')
+fi
+
 rpmbuild_cmd+=(
+    # EL10's redhat-rpm-config deletes libtool archives from the buildroot,
+    # but the upstream PMIx spec lists lib/*.la in %files. No-op on EL8/EL9.
+    --define '__brp_remove_la_files %{nil}'
     --define 'build_all_in_one_rpm 0'
     --define 'install_in_opt 1'
     --define 'install_modulefile 1'

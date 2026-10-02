@@ -7,6 +7,10 @@ SLURM_VERSION="${SLURM_VERSION:?SLURM_VERSION must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 DISTRO="${DISTRO:?DISTRO must be set}"
 
+# shellcheck source=scripts/rpm_reproducibility.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rpm_reproducibility.sh"
+configure_reproducible_rpmbuild
+
 # print input vars
 echo "SLURM_RELTAG: ${SLURM_RELTAG}, SLURM_VERSION: ${SLURM_VERSION}"
 
@@ -125,9 +129,12 @@ prepare_nvml_prefix() {
         return 1
     fi
 
-    local nvml_prefix
-    if ! nvml_prefix="$(mktemp -d)"; then
-        echo "Unable to create temporary NVML staging directory" >&2
+    # Fixed (not mktemp) path: it is passed to configure and recorded in the
+    # rpmbuild command, so a random name would make builds differ.
+    local nvml_prefix="${HOME}/nvml-prefix"
+    rm -rf "${nvml_prefix}"
+    if ! mkdir -p "${nvml_prefix}"; then
+        echo "Unable to create NVML staging directory ${nvml_prefix}" >&2
         return 1
     fi
     if ! mkdir -p "${nvml_prefix}/include" "${nvml_prefix}/lib/stubs" "${nvml_prefix}/lib64/stubs"; then
@@ -190,12 +197,17 @@ fi
 
 rpmbuild_args=(
         --with pam
-        --with slurmrestd
         --with hwloc
         --with lua
         --with mysql
         --with numa
 )
+
+# slurmrestd needs http-parser, which EL10 (BaseOS/AppStream/CRB/EPEL) does
+# not ship; such tuples set SLURM_WITH_SLURMRESTD=false in the manifest.
+if [ "${SLURM_WITH_SLURMRESTD:-true}" = "true" ]; then
+    rpmbuild_args+=(--with slurmrestd)
+fi
 
 if [ "${#pmix_args[@]}" -gt 0 ]; then
     rpmbuild_args+=("${pmix_args[@]}")

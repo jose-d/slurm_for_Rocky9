@@ -42,6 +42,17 @@ if [ "${expect_ucx}" = "true" ] && [ "${rhel_major}" = "8" ]; then
     dnf config-manager --add-repo \
         https://linux.mellanox.com/public/repo/doca/3.3.0/rhel8/x86_64/
 fi
+if [ "${rhel_major}" = "10" ]; then
+    # EPEL10 packages may depend on CRB, as on the EL10 GPU nodes.
+    dnf install -y dnf-plugins-core
+    dnf config-manager --set-enabled crb
+    if [ "${expect_ucx}" = "true" ]; then
+        # The EL10 builder takes UCX and rdma-core from DOCA 3.5.0, which is
+        # also the DOCA release installed on the EL10 GPU nodes.
+        dnf config-manager --add-repo \
+            https://linux.mellanox.com/public/repo/doca/3.5.0/rhel10/x86_64/
+    fi
+fi
 
 mapfile -d '' -t all_rpms < <(find "${rpm_dir}" -type f -name '*.rpm' -print0)
 if [ "${#all_rpms[@]}" -eq 0 ]; then
@@ -113,6 +124,51 @@ for binary in slurmctld srun; do
         exit 1
     fi
 done
+
+# Report the plugin set shipped in the Slurm RPMs; optionally require some.
+# EXPECT_SLURM_PLUGINS is a whitespace-separated list of plugin names without
+# the .so suffix (for example "gpu_nvml mpi_pmix_v6"), taken from the
+# manifest's expected_slurm_plugins.
+mapfile -t shipped_plugins < <(
+    for rpm_path in "${all_rpms[@]}"; do
+        if [[ "$(rpm -qp --queryformat '%{NAME}' "${rpm_path}")" == slurm* ]]; then
+            rpm -qpl "${rpm_path}"
+        fi
+    done | awk -F/ '$0 ~ "/slurm/[^/]+[.]so$" {sub(/[.]so$/, "", $NF); print $NF}' | sort -u
+)
+printf 'Slurm plugins shipped in the RPMs (%d):\n' "${#shipped_plugins[@]}"
+printf '  %s\n' "${shipped_plugins[@]}"
+if [ -n "${EXPECT_SLURM_PLUGINS:-}" ]; then
+    missing_plugins=()
+    for plugin in ${EXPECT_SLURM_PLUGINS}; do
+        if ! printf '%s\n' "${shipped_plugins[@]}" | grep -qxF "${plugin}"; then
+            missing_plugins+=("${plugin}")
+        fi
+    done
+    if [ "${#missing_plugins[@]}" -ne 0 ]; then
+        echo "Expected Slurm plugins missing from the RPMs:" >&2
+        printf '  %s\n' "${missing_plugins[@]}" >&2
+        exit 1
+    fi
+    echo "All expected Slurm plugins are present"
+
+    # Every installed plugin must resolve its shared libraries from the
+    # distribution repositories alone. libnvidia-ml comes from the GPU driver,
+    # which is not part of the runtime image.
+    unresolved=""
+    while IFS= read -r -d '' plugin; do
+        missing_libs="$(ldd "${plugin}" 2>/dev/null | grep 'not found' | grep -v 'libnvidia-ml' || true)"
+        if [ -n "${missing_libs}" ]; then
+            unresolved+="${plugin}:"$'\n'"${missing_libs}"$'\n'
+        fi
+    done < <(find /usr/lib64/slurm -maxdepth 1 -type f -name '*.so' -print0)
+    if [ -n "${unresolved}" ]; then
+        echo "Unresolved runtime dependencies in installed Slurm plugins:" >&2
+        printf '%s' "${unresolved}" >&2
+        exit 1
+    fi
+    echo "All installed Slurm plugins resolve their runtime libraries"
+fi
 
 mapfile -d '' -t pmix_plugins < <(
     find /usr/lib64 /usr/lib -type f -path '*/slurm/mpi_pmix*.so' -print0 2>/dev/null

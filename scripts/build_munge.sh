@@ -7,6 +7,10 @@ MUNGE_RELTAG="${MUNGE_RELTAG:?MUNGE_RELTAG must be set}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 DISTRO="${DISTRO:?DISTRO must be set}"
 
+# shellcheck source=scripts/rpm_reproducibility.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rpm_reproducibility.sh"
+configure_reproducible_rpmbuild
+
 # print input vars
 echo "MUNGE_RELTAG: ${MUNGE_RELTAG}, MUNGE_VERSION: ${MUNGE_VERSION}"
 

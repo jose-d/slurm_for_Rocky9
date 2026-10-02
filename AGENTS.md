@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- `build-manifest.json` is the source of truth for supported EL8/EL9 build tuples, versions, checksums, and digest-pinned container images.
+- `build-manifest.json` is the source of truth for supported EL8/EL9/EL10 build tuples, versions, checksums, and digest-pinned container images. Tuples whose builder images are not yet published carry placeholder references and are skipped by `target_distro=all`.
 - `.github/workflows/` contains the PMIx matrix build and the separate Rocky 8 no-PMIx workflow.
 - `scripts/` contains the active Bash build, download, repository, and smoke-test helpers. `create_build_provenance.py` produces release provenance.
 - `legacy/` preserves obsolete Apptainer recipes for reference; do not extend these for current builds.
@@ -10,7 +10,7 @@
 
 ## Build, Test, and Development Commands
 
-Full package builds run in GitHub Actions because they depend on pinned GHCR builder images:
+Full package builds run in GitHub Actions because they depend on pinned GHCR builder images. `scripts/build_local.sh DISTRO` runs the same sequence locally with podman, building the builder images from a `jose-d/images` checkout when the pinned images are unavailable:
 
 ```bash
 gh workflow run build_slurm.yml --ref master

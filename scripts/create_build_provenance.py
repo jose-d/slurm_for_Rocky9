@@ -47,6 +47,17 @@ def main():
         builds = [build for build in builds if build["distro"] == args.distro]
         if len(builds) != 1:
             raise ValueError(f"Expected one manifest build for distro {args.distro!r}")
+    else:
+        # The workflow skips tuples whose images are still local placeholders
+        # (not digest-pinned); leave them out of an "all" provenance as well.
+        builds = [
+            build
+            for build in builds
+            if all(
+                re.search(r"@sha256:[0-9a-fA-F]{64}$", build.get(key, ""))
+                for key in ("pmix_builder_image", "slurm_builder_image", "runtime_image")
+            )
+        ]
 
     selected_builds = []
     sources = {}

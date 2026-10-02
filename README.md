@@ -1,4 +1,4 @@
-# Build of Slurm for Rocky8 and Rocky9
+# Build of Slurm for Rocky8, Rocky9 and Rocky10
 
 This repository automates the process of building the [Slurm](https://github.com/SchedMD/slurm) scheduler with [OpenPMIx](https://github.com/openpmix/openpmix) on Rocky Linux-compatible distributions, leveraging GitHub Actions for continuous integration and delivery.
 
@@ -6,7 +6,9 @@ Container images from the [jose-d/images](https://github.com/jose-d/images) repo
 
 Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the selected matrix. Each tuple can stage multiple PMIx builds for a single Slurm build. EL9 currently builds Slurm 26.05.4 against PMIx 3.2.5 and PMIx 6.1.0, without UCX or DOCA. EL8 retains its independently configured Slurm version and UCX/DOCA feature set.
 
-Start the `Build Slurm packages` workflow manually and choose `target_distro=el8`, `target_distro=el9`, or `target_distro=all`. The default is `all` for compatibility with existing invocations. For example:
+EL10 builds Slurm 25.11.5 (not newer than the cluster's 25.11.5 `slurmctld`) against PMIx 3.2.5 and PMIx 6.1.0 with UCX (from DOCA 3.5.0), NVML (CUDA 13.4 `cuda-nvml-devel` from NVIDIA's RHEL10 repository) and RPATH; see [EL10](#el10) for the plugins that cannot be built there.
+
+Start the `Build Slurm packages` workflow manually and choose `target_distro=el8`, `target_distro=el9`, `target_distro=el10`, or `target_distro=all`. The default is `all` for compatibility with existing invocations. For example:
 
 ```bash
 gh workflow run build_slurm.yml --ref master -f target_distro=el9
@@ -15,6 +17,45 @@ gh workflow run build_slurm.yml --ref master -f target_distro=el9
 For Rocky8/EL8 clusters that do not need PMIx or InfiniBand support, the repository also provides a separate `Build Slurm packages without PMIx` workflow. It uses the digest-pinned Rocky8 Slurm builder image with NVML/CUDA support enabled and skips the PMIx dependency entirely.
 
 If the workflow needs to pull private GHCR images from `jose-d/images`, define an optional repository variable `GHCR_U` and a matching repository secret `GHCR_S`; otherwise the workflow falls back to the current repository owner and `GITHUB_TOKEN`.
+
+The optional `reltag` input selects the RPM release tag: empty keeps the previous behaviour (the current UTC timestamp), `commit` derives it from the commit time (the same value `scripts/build_local.sh` uses), and any other value is used verbatim. RPM build times always come from `SOURCE_DATE_EPOCH`, the commit time.
+
+## Local builds
+
+`scripts/build_local.sh DISTRO` runs the workflow's sequence (every PMIx build, Munge, Slurm, then the smoke test in a fresh runtime container) on any Linux host with podman, reading all inputs from `build-manifest.json` and verifying every source with `scripts/download_verified.sh`:
+
+```bash
+git clone https://github.com/jose-d/slurm_for_Rocky9.git
+git clone https://github.com/jose-d/images.git     # only needed for local builder images
+cd slurm_for_Rocky9
+scripts/build_local.sh el10
+```
+
+The result is `local-build/rpm_tarball_<distro>_<RELTAG>.tar.gz` with the workflow's `rpms/{pmix,munge,slurm}/` layout; logs, `rpmbuild` commands and builder package lists are in `local-build/<distro>/logs/`. Digest-pinned builder images are pulled when available; otherwise (for example while the manifest still has placeholder references, or for private images) the builder images are built locally from `../images/docker/<dist>/<image>/Dockerfile`, including their parent images. Useful variables: `RELTAG`, `SOURCE_DATE_EPOCH`, `IMAGES_REPO`, `LOCAL_IMAGES=auto|always|never`, `REBUILD_IMAGES=1`, `OUTPUT_DIR`, `CONTAINER_ENGINE` (see the script header).
+
+### Reproducibility
+
+- `SOURCE_DATE_EPOCH` defaults to the committer time of `HEAD`; `RELTAG` defaults to that time formatted as `%Y%m%d%H%M%S` (the workflow's format). Both can be overridden, for example `RELTAG=20260505090930 scripts/build_local.sh el10`.
+- Every `rpmbuild` runs with `%use_source_date_epoch_as_buildtime 1`, `%clamp_mtime_to_source_date_epoch 1`, `%source_date_epoch_from_changelog 0` and `%_buildhost reproducible` (`scripts/rpm_reproducibility.sh`), in a container with the fixed hostname `reproducible` and the fixed workspace `/workspace`.
+- Builder and runtime images are pinned by digest in the manifest. Locally built builder images are not pinned (they install the newest packages at image build time), so only builds from the same image are expected to be bit-identical; publish the images and pin them for cross-host reproducibility.
+- The local tarball itself is deterministic (sorted, fixed owner and mtime, `gzip -n`).
+
+## EL10
+
+The EL10 builder images are not published yet, so the `el10` tuple in `build-manifest.json` uses placeholder references (`ghcr.io/jose-d/images/rocky10_*-build:unpublished`). The workflow skips such tuples for `target_distro=all` (with a warning) and refuses an explicit `target_distro=el10`; `scripts/build_local.sh el10` builds the images locally. To publish them:
+
+1. Merge the `docker/rocky10/` images into `jose-d/images` and run its `Build Rocky10 Docker imgs` workflow (`gh workflow run docker_rocky10_build_base.yml -R jose-d/images`).
+2. Look up the digests of the pushed `latest` (or run-id) tags, for example `skopeo inspect --format '{{.Digest}}' docker://ghcr.io/jose-d/images/rocky10_pmix-build:latest` (or `podman pull` and `podman image inspect --format '{{.Digest}}'`), for `rocky10_pmix-build` and `rocky10_slurm-build`.
+3. Replace `pmix_builder_image` and `slurm_builder_image` of the `el10` tuple with `ghcr.io/jose-d/images/rocky10_<image>@sha256:<digest>` and rebuild.
+
+The EL10 smoke test additionally requires every plugin in the tuple's `expected_slurm_plugins` and checks that all installed plugins resolve their libraries from Rocky 10 (with CRB), EPEL 10 and DOCA 3.5.0 (except the driver's `libnvidia-ml`).
+
+Plugins of the EL8 production node that are not built on EL10:
+
+| Plugin | Reason |
+| --- | --- |
+| `http_parser` (`http_parser_libhttp_parser`) | `http-parser`/`http-parser-devel` is not shipped in Rocky 10 BaseOS/AppStream/CRB or EPEL 10. |
+| `rest_auth_jwt` (and the other `rest_auth_*` plugins, `slurmrestd` itself) | Slurm's configure refuses to build `slurmrestd` without http-parser, so the tuple sets `slurm_with_slurmrestd: false`. These plugins are only used by `slurmrestd`, which does not run on compute nodes. |
 
 ## HTTP RPM repositories
 
