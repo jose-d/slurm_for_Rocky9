@@ -50,6 +50,8 @@ The EL10 builder images are published from `jose-d/images` (`docker/rocky10/`, w
 
 The EL10 smoke test additionally requires every plugin in the tuple's `expected_slurm_plugins` and checks that all installed plugins resolve their libraries from Rocky 10 (with CRB), EPEL 10 and DOCA 3.5.0 (except the driver's `libnvidia-ml`).
 
+The EL8 tuple's `expected_slurm_plugins` lists the plugins the Phoebe Slurm server and its EL8 nodes rely on (taken from their 25.11.5 installations, minus `data_parser_v0_0_41`, which Slurm 26.05 removed), so the smoke test fails if a release drops one of them. The same library-resolution check runs against Rocky 8 and EPEL 8.
+
 ### http-parser
 
 Slurm 25.11 needs [http-parser](https://github.com/nodejs/http-parser) for `slurmrestd` and its `http_parser_libhttp_parser`, `rest_auth_*` and `openapi_*` plugins, but Rocky 10 (BaseOS, AppStream, CRB) and EPEL 10 no longer ship it. The `el10` tuple therefore has an `http_parser` entry, and the workflow's `build_http_parser` job (or the corresponding `scripts/build_local.sh` step) rebuilds Rocky 9 AppStream's `http-parser-2.9.4-6.el9.src.rpm` in the EL10 Slurm builder with `scripts/build_http_parser.sh`:
