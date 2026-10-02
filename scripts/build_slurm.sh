@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -223,8 +223,8 @@ rpmbuild_args=(
         --with numa
 )
 
-# slurmrestd needs http-parser, which EL10 (BaseOS/AppStream/CRB/EPEL) does
-# not ship; such tuples set SLURM_WITH_SLURMRESTD=false in the manifest.
+# slurmrestd needs an HTTP parser: Slurm 26.05 can use llhttp from EL10,
+# while older releases require http-parser.
 if [ "${SLURM_WITH_SLURMRESTD:-true}" = "true" ]; then
     rpmbuild_args+=(--with slurmrestd)
 fi

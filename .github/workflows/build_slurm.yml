@@ -400,7 +400,7 @@ jobs:
     steps:
       - name: Nothing to build
         if: matrix.http_parser_version == ''
-        run: echo "${DISTRO} uses the distribution's http-parser"
+        run: echo "${DISTRO} uses the distribution's HTTP parser"
 
       - name: Checkout repository
         if: matrix.http_parser_version != ''
