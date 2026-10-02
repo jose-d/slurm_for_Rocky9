@@ -81,11 +81,13 @@ sed -i -E "s/^(Release:[[:space:]]*)([0-9][0-9.]*)%\{\?dist\}[[:space:]]*$/\1\2.
 grep -Eq "^Release:[[:space:]]*[0-9][0-9.]*\.${HTTP_PARSER_RELTAG}%\{\?dist\}$" "${spec_path}" \
     || { echo "Spec patch failed: release tag not set in ${spec_path}" >&2; exit 1; }
 
-# The source RPM records every source's mode and mtime; the spec was just
-# rewritten under the caller's umask.
-chmod 0644 "${spec_path}"
+# The rebuilt source RPM records every source's mode and mtime (and each binary
+# RPM records the source RPM's digest); the spec was just rewritten under the
+# caller's umask, so fix all of them.
+mapfile -t source_files < <(rpm -qp --nosignature --qf '[%{FILENAMES}\n]' "${srpm}" | grep -v '\.spec$')
+chmod 0644 "${spec_path}" "${source_files[@]/#/${HOME}/rpmbuild/SOURCES/}"
 if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
-    touch -d "@${SOURCE_DATE_EPOCH}" "${spec_path}"
+    touch -d "@${SOURCE_DATE_EPOCH}" "${spec_path}" "${source_files[@]/#/${HOME}/rpmbuild/SOURCES/}"
 fi
 
 rpm -qa | sort > "${GITHUB_WORKSPACE}/image_http_parser_rpms_${DISTRO}.txt"
@@ -94,6 +96,14 @@ rpmbuild_cmd=(rpmbuild -ba "${spec_path}")
 printf '%q ' "${rpmbuild_cmd[@]}" > "${GITHUB_WORKSPACE}/rpmbuild_http_parser_${DISTRO}.txt"
 printf '\n' >> "${GITHUB_WORKSPACE}/rpmbuild_http_parser_${DISTRO}.txt"
 "${rpmbuild_cmd[@]}"
+
+# Record the rebuilt source RPM's file metadata and identity in the build log,
+# so builds from different hosts can be compared.
+for src_rpm in "${HOME}"/rpmbuild/SRPMS/http-parser-*.src.rpm; do
+    rpm -qp --dump "${src_rpm}"
+    rpm -qp --qf 'SRPM %{NEVR} buildhost=%{BUILDHOST} buildtime=%{BUILDTIME} cookie=%{COOKIE} sha256header=%{SHA256HEADER} payloaddigest=%{PAYLOADDIGEST}\n' "${src_rpm}"
+    md5sum "${src_rpm}"
+done
 
 mkdir -p "${GITHUB_WORKSPACE}/rpms"
 mapfile -d '' -t http_parser_rpms < <(find "${HOME}/rpmbuild/RPMS" -type f -name 'http-parser*.rpm' -print0)
