@@ -42,9 +42,9 @@ The result is `local-build/rpm_tarball_<distro>_<RELTAG>.tar.gz` with the workfl
 
 ## EL10
 
-The EL10 builder images are not published yet, so the `el10` tuple in `build-manifest.json` uses placeholder references (`ghcr.io/jose-d/images/rocky10_*-build:unpublished`). The workflow skips such tuples for `target_distro=all` (with a warning) and refuses an explicit `target_distro=el10`; `scripts/build_local.sh el10` builds the images locally. To publish them:
+The EL10 builder images are published from `jose-d/images` (`docker/rocky10/`, workflow `Build Rocky10 Docker imgs`) and pinned by digest in the `el10` tuple. A tuple whose images are not digest-pinned is skipped for `target_distro=all` (with a warning) and refused for an explicit distro; `scripts/build_local.sh` then builds the images locally. To publish new images:
 
-1. Merge the `docker/rocky10/` images into `jose-d/images` and run its `Build Rocky10 Docker imgs` workflow (`gh workflow run docker_rocky10_build_base.yml -R jose-d/images`).
+1. Run the `Build Rocky10 Docker imgs` workflow (`gh workflow run docker_rocky10_build_base.yml -R jose-d/images`).
 2. Look up the digests of the pushed `latest` (or run-id) tags, for example `skopeo inspect --format '{{.Digest}}' docker://ghcr.io/jose-d/images/rocky10_pmix-build:latest` (or `podman pull` and `podman image inspect --format '{{.Digest}}'`), for `rocky10_pmix-build` and `rocky10_slurm-build`.
 3. Replace `pmix_builder_image` and `slurm_builder_image` of the `el10` tuple with `ghcr.io/jose-d/images/rocky10_<image>@sha256:<digest>` and rebuild.
 

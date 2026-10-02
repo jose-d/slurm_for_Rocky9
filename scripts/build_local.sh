@@ -361,7 +361,7 @@ staging="$(mktemp -d)"
 trap 'rm -rf "${staging}"' EXIT
 mkdir -p "${staging}/rpms"
 cp -r "${rpm_out}/pmix" "${rpm_out}/munge" "${rpm_out}/slurm" "${staging}/rpms/"
-tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner \
+tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner --mode=u+rwX,go+rX,go-w \
     --format=gnu -C "${staging}" -cf - rpms | gzip -9 -n > "${tarball}"
 
 log "Done"

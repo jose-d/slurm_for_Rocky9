@@ -622,6 +622,7 @@ jobs:
       - smoke_test
     env:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prolog.outputs.source_date_epoch }}
 
     steps:
       - name: Checkout repository
@@ -722,7 +723,10 @@ jobs:
               cp "${rpm}" "${distro_stage}/${rpm_dir}/"
             done < <(find rpms -type f -name "*.${distro}.*.rpm" -print0)
 
-            tar -czf "rpm_tarball_${distro}_${RELTAG}.tar.gz" -C "${distro_stage}" rpms
+            # Normalised like scripts/build_local.sh, so equal RPMs give an equal tarball.
+            tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner \
+                --mode=u+rwX,go+rX,go-w --format=gnu -C "${distro_stage}" -cf - rpms \
+              | gzip -9 -n > "rpm_tarball_${distro}_${RELTAG}.tar.gz"
           done
 
       - name: Install RPM repository tooling
