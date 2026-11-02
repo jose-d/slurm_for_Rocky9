@@ -19,12 +19,12 @@
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
-      "slurm_version": "26.05.4",
-      "slurm_sha256": "035f4b193d4de979ba5381beca206a50b6b886b2793b06f68a1ce7e67022b06a",
+      "slurm_version": "26.05.5",
+      "slurm_sha256": "4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68",
       "munge_version": "0.5.18",
       "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
-      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build@sha256:a6def561bc0f46eb83d53ce1d3415f449bcea2aaa281611cae4472cb441a1aa1",
-      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90",
+      "pmix_builder_image": "ghcr.io/jose-d/images/rocky8_pmix-build@sha256:f5159047e8bae115f48c24decb09d1c9f5d8b226eb45b16697c08fbac4ff8dd8",
+      "slurm_builder_image": "ghcr.io/jose-d/images/rocky8_slurm-build@sha256:59102477b505fbbbd244cd20e78442ce90b5f7a9f38bfcc2322e06372ba523f9",
       "runtime_image": "docker.io/library/rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c",
       "nvml_version": "13-2",
       "slurm_nvml_path": "/usr/local/cuda/targets/x86_64-linux/",

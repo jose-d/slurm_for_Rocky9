@@ -36,11 +36,11 @@ dnf install -y epel-release findutils
 
 rhel_major="$(rpm -E '%{rhel}')"
 if [ "${expect_ucx}" = "true" ] && [ "${rhel_major}" = "8" ]; then
-    # The EL8 builders get hwloc-devel from PowerTools and UCX 1.20 from the
+    # The EL8 builders get hwloc-devel from PowerTools and UCX 1.22 from the
     # same versioned NVIDIA DOCA repository used to build Slurm.
     dnf config-manager --set-enabled powertools
     dnf config-manager --add-repo \
-        https://linux.mellanox.com/public/repo/doca/3.3.0/rhel8/x86_64/
+        https://linux.mellanox.com/public/repo/doca/3.5.0/rhel8/x86_64/
 fi
 if [ "${rhel_major}" = "10" ]; then
     # EPEL10 packages may depend on CRB, as on the EL10 GPU nodes.

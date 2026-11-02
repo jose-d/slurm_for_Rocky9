@@ -9,7 +9,7 @@ env:
   SLURM_VERSION: 26.05.5
   SLURM_SHA256: 4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68
   SLURM_SPEC_PATH: ./slurm-26.05.5/slurm.spec
-  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90
+  SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:59102477b505fbbbd244cd20e78442ce90b5f7a9f38bfcc2322e06372ba523f9
   SLURM_NVML_PATH: /usr/local/cuda/targets/x86_64-linux/
   SLURM_WITH_RPATH: "true"
   MUNGE_VERSION: 0.5.18
@@ -53,7 +53,7 @@ jobs:
       RELTAG: ${{ needs.prolog.outputs.reltag }}
       DISTRO: el8-no-pmix
       MUNGE_VERSION: 0.5.18
-      MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:96bb95b241867af6a87c1cbfb6f219bc2ec251342f8a91a5f6b86efeb2407a90
+      MUNGE_BUILDER_IMAGE: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:59102477b505fbbbd244cd20e78442ce90b5f7a9f38bfcc2322e06372ba523f9
       MUNGE_ARTIFACT_SUFFIX: el8-no-pmix-munge-0.5.18
     steps:
       - name: Checkout repository
