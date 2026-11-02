@@ -4,7 +4,7 @@ This repository automates the process of building the [Slurm](https://github.com
 
 Container images from the [jose-d/images](https://github.com/jose-d/images) repository are utilized.
 
-Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the selected matrix. Each tuple can stage multiple PMIx builds for a single Slurm build. EL9 currently builds Slurm 26.05.4 against PMIx 3.2.5 and PMIx 6.1.0, without UCX or DOCA. EL8 retains its independently configured Slurm version and UCX/DOCA feature set.
+Supported build tuples are listed in `build-manifest.json`, and the GitHub Actions workflow reads that manifest to build the selected matrix. Each tuple can stage multiple PMIx builds for a single Slurm build. EL9 currently builds Slurm 26.05.5 against PMIx 3.2.5 and PMIx 6.1.0, without UCX or DOCA. EL8 retains its independently configured Slurm version and UCX/DOCA feature set.
 
 EL10 builds Slurm 26.05.5 against PMIx 3.2.5 and PMIx 6.1.0 with UCX (from DOCA 3.5.0), NVML (CUDA 13.4 `cuda-nvml-devel` from NVIDIA's RHEL10 repository), RPATH and `slurmrestd`, using Rocky 10's llhttp parser (see [EL10](#el10)). Slurm daemons must not be newer than the `slurmctld` they talk to.
 
