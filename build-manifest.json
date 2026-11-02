@@ -119,8 +119,8 @@
           "install_path": "/opt/pmix/6.1.0"
         }
       ],
-      "slurm_version": "26.05.4",
-      "slurm_sha256": "035f4b193d4de979ba5381beca206a50b6b886b2793b06f68a1ce7e67022b06a",
+      "slurm_version": "26.05.5",
+      "slurm_sha256": "4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68",
       "munge_version": "0.5.18",
       "munge_sha256": "39c3ec6ef5604bfa206e8aa10fc05d5119040f6de4a554bc0fb98ca1aed838dc",
       "pmix_builder_image": "ghcr.io/jose-d/images/rocky10_pmix-build@sha256:d09833ba3299122089c9041a6b65fd0e2da6a6a49beaf429aff4f88705514dd8",
