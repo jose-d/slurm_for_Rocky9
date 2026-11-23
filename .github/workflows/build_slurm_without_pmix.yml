@@ -6,9 +6,9 @@ on: workflow_dispatch
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   DISTRO: el8-no-pmix
-  SLURM_VERSION: 26.05.5
-  SLURM_SHA256: 4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68
-  SLURM_SPEC_PATH: ./slurm-26.05.5/slurm.spec
+  SLURM_VERSION: 26.05.6
+  SLURM_SHA256: 386a0d624fa7c730cf4dfa9171bf6dc66b6816b5683242c5271879999a54a9a7
+  SLURM_SPEC_PATH: ./slurm-26.05.6/slurm.spec
   SLURMIMAGE_URL: ghcr.io/jose-d/images/rocky8_slurm-build@sha256:59102477b505fbbbd244cd20e78442ce90b5f7a9f38bfcc2322e06372ba523f9
   SLURM_NVML_PATH: /usr/local/cuda/targets/x86_64-linux/
   SLURM_WITH_RPATH: "true"
